@@ -2,6 +2,17 @@ version: "1.0"
 project: devlog-example
 logs_dir: ./logs
 run_mode: timestamped
+
+# Optional: Automatic log cleanup (for timestamped mode only)
+# Keep only the 10 most recent log runs
+# max_runs: 10
+
+# OR keep logs from the last 30 days
+# retention_days: 30
+
+# Note: Both max_runs and retention_days can be used together.
+# Directories will be removed if they exceed max_runs OR are older than retention_days.
+
 tmux:
   session: devlog-demo
   windows:

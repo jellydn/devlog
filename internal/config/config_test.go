@@ -1,10 +1,12 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLoad_ValidConfig(t *testing.T) {
@@ -309,5 +311,292 @@ func TestConfig_ResolveLogsDir_Overwrite(t *testing.T) {
 	dir := cfg.ResolveLogsDir()
 	if dir != "./logs" {
 		t.Errorf("ResolveLogsDir() = %q, want %q", dir, "./logs")
+	}
+}
+
+func TestLoad_RetentionConfig(t *testing.T) {
+	content := `
+version: "1.0"
+project: myapp
+max_runs: 10
+retention_days: 30
+tmux:
+  session: dev
+  windows:
+    - name: server
+      panes:
+        - cmd: npm run dev
+          log: server.log
+`
+
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "devlog.yml")
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+
+	if cfg.MaxRuns != 10 {
+		t.Errorf("MaxRuns = %d, want %d", cfg.MaxRuns, 10)
+	}
+	if cfg.RetentionDays != 30 {
+		t.Errorf("RetentionDays = %d, want %d", cfg.RetentionDays, 30)
+	}
+}
+
+func TestValidate_NegativeMaxRuns(t *testing.T) {
+	cfg := &Config{
+		Version: "1.0",
+		Project: "test",
+		RunMode: "timestamped",
+		MaxRuns: -1,
+		Tmux: TmuxConfig{
+			Session: "test",
+			Windows: []WindowConfig{
+				{
+					Name: "main",
+					Panes: []PaneConfig{
+						{Cmd: "echo test"},
+					},
+				},
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("Validate() expected error for negative max_runs, got nil")
+	}
+	if !strings.Contains(err.Error(), "max_runs must be non-negative") {
+		t.Errorf("Validate() error = %q, want error about max_runs", err.Error())
+	}
+}
+
+func TestValidate_NegativeRetentionDays(t *testing.T) {
+	cfg := &Config{
+		Version:       "1.0",
+		Project:       "test",
+		RunMode:       "timestamped",
+		RetentionDays: -1,
+		Tmux: TmuxConfig{
+			Session: "test",
+			Windows: []WindowConfig{
+				{
+					Name: "main",
+					Panes: []PaneConfig{
+						{Cmd: "echo test"},
+					},
+				},
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("Validate() expected error for negative retention_days, got nil")
+	}
+	if !strings.Contains(err.Error(), "retention_days must be non-negative") {
+		t.Errorf("Validate() error = %q, want error about retention_days", err.Error())
+	}
+}
+
+func TestCleanupOldRuns_MaxRuns(t *testing.T) {
+	tmpDir := t.TempDir()
+	logsDir := filepath.Join(tmpDir, "logs")
+	if err := os.MkdirAll(logsDir, 0755); err != nil {
+		t.Fatalf("Failed to create logs dir: %v", err)
+	}
+
+	// Create 5 log directories with different timestamps
+	dirs := []string{
+		"20240101-120000",
+		"20240102-120000",
+		"20240103-120000",
+		"20240104-120000",
+		"20240105-120000",
+	}
+	for _, dir := range dirs {
+		dirPath := filepath.Join(logsDir, dir)
+		if err := os.MkdirAll(dirPath, 0755); err != nil {
+			t.Fatalf("Failed to create test dir %s: %v", dir, err)
+		}
+	}
+
+	cfg := &Config{
+		LogsDir: logsDir,
+		RunMode: "timestamped",
+		MaxRuns: 3,
+	}
+
+	if err := cfg.CleanupOldRuns(false); err != nil {
+		t.Fatalf("CleanupOldRuns() failed: %v", err)
+	}
+
+	// Check that only 3 directories remain
+	entries, err := os.ReadDir(logsDir)
+	if err != nil {
+		t.Fatalf("Failed to read logs dir: %v", err)
+	}
+
+	var remainingDirs []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			remainingDirs = append(remainingDirs, entry.Name())
+		}
+	}
+
+	if len(remainingDirs) != 3 {
+		t.Errorf("After cleanup, got %d directories, want 3. Remaining: %v", len(remainingDirs), remainingDirs)
+	}
+}
+
+func TestCleanupOldRuns_RetentionDays(t *testing.T) {
+	tmpDir := t.TempDir()
+	logsDir := filepath.Join(tmpDir, "logs")
+	if err := os.MkdirAll(logsDir, 0755); err != nil {
+		t.Fatalf("Failed to create logs dir: %v", err)
+	}
+
+	// Create directories and set modification times
+	oldDir := filepath.Join(logsDir, "20240101-120000")
+	recentDir := filepath.Join(logsDir, "20240201-120000")
+
+	for _, dir := range []string{oldDir, recentDir} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatalf("Failed to create test dir: %v", err)
+		}
+	}
+
+	// Set old directory to be 40 days old
+	oldTime := time.Now().AddDate(0, 0, -40)
+	if err := os.Chtimes(oldDir, oldTime, oldTime); err != nil {
+		t.Fatalf("Failed to set old time: %v", err)
+	}
+
+	cfg := &Config{
+		LogsDir:       logsDir,
+		RunMode:       "timestamped",
+		RetentionDays: 30,
+	}
+
+	if err := cfg.CleanupOldRuns(false); err != nil {
+		t.Fatalf("CleanupOldRuns() failed: %v", err)
+	}
+
+	// Check that old directory is removed
+	if _, err := os.Stat(oldDir); !os.IsNotExist(err) {
+		t.Errorf("Old directory still exists: %s", oldDir)
+	}
+
+	// Check that recent directory remains
+	if _, err := os.Stat(recentDir); err != nil {
+		t.Errorf("Recent directory was removed: %s", recentDir)
+	}
+}
+
+func TestCleanupOldRuns_DryRun(t *testing.T) {
+	tmpDir := t.TempDir()
+	logsDir := filepath.Join(tmpDir, "logs")
+	if err := os.MkdirAll(logsDir, 0755); err != nil {
+		t.Fatalf("Failed to create logs dir: %v", err)
+	}
+
+	// Create 5 log directories
+	for i := 1; i <= 5; i++ {
+		dir := filepath.Join(logsDir, fmt.Sprintf("2024010%d-120000", i))
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatalf("Failed to create test dir: %v", err)
+		}
+	}
+
+	cfg := &Config{
+		LogsDir: logsDir,
+		RunMode: "timestamped",
+		MaxRuns: 3,
+	}
+
+	if err := cfg.CleanupOldRuns(true); err != nil {
+		t.Fatalf("CleanupOldRuns() failed: %v", err)
+	}
+
+	// Check that all 5 directories still exist (dry run)
+	entries, err := os.ReadDir(logsDir)
+	if err != nil {
+		t.Fatalf("Failed to read logs dir: %v", err)
+	}
+
+	var remainingDirs []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			remainingDirs = append(remainingDirs, entry.Name())
+		}
+	}
+
+	if len(remainingDirs) != 5 {
+		t.Errorf("After dry run cleanup, got %d directories, want 5. Remaining: %v", len(remainingDirs), remainingDirs)
+	}
+}
+
+func TestCleanupOldRuns_NoPolicy(t *testing.T) {
+	tmpDir := t.TempDir()
+	logsDir := filepath.Join(tmpDir, "logs")
+	if err := os.MkdirAll(logsDir, 0755); err != nil {
+		t.Fatalf("Failed to create logs dir: %v", err)
+	}
+
+	// Create some directories
+	for i := 1; i <= 5; i++ {
+		dir := filepath.Join(logsDir, fmt.Sprintf("2024010%d-120000", i))
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatalf("Failed to create test dir: %v", err)
+		}
+	}
+
+	cfg := &Config{
+		LogsDir:       logsDir,
+		RunMode:       "timestamped",
+		MaxRuns:       0,
+		RetentionDays: 0,
+	}
+
+	if err := cfg.CleanupOldRuns(false); err != nil {
+		t.Fatalf("CleanupOldRuns() failed: %v", err)
+	}
+
+	// Check that all directories still exist (no policy)
+	entries, err := os.ReadDir(logsDir)
+	if err != nil {
+		t.Fatalf("Failed to read logs dir: %v", err)
+	}
+
+	var remainingDirs []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			remainingDirs = append(remainingDirs, entry.Name())
+		}
+	}
+
+	if len(remainingDirs) != 5 {
+		t.Errorf("With no policy, got %d directories, want 5", len(remainingDirs))
+	}
+}
+
+func TestCleanupOldRuns_OverwriteMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	logsDir := filepath.Join(tmpDir, "logs")
+
+	cfg := &Config{
+		LogsDir: logsDir,
+		RunMode: "overwrite",
+		MaxRuns: 3,
+	}
+
+	// Should return nil without error for overwrite mode
+	if err := cfg.CleanupOldRuns(false); err != nil {
+		t.Fatalf("CleanupOldRuns() failed: %v", err)
 	}
 }

@@ -6,6 +6,12 @@
 	if (window.__devlogInjected) return;
 	window.__devlogInjected = true;
 
+	function debug(message, err) {
+		try {
+			console.debug("[devlog] " + message, err || "");
+		} catch (_) {}
+	}
+
 	const currentUrl = window.location.href;
 	let isLoggingEnabled = false;
 	let logLevels = ["log", "info", "warn", "error", "debug", "trace"];
@@ -15,7 +21,13 @@
 			chrome.runtime.sendMessage(
 				{ type: "GET_CONFIG", url: currentUrl },
 				(response) => {
-					if (chrome.runtime.lastError) return;
+					if (chrome.runtime.lastError) {
+						debug(
+							"GET_CONFIG failed:",
+							chrome.runtime.lastError.message,
+						);
+						return;
+					}
 					if (response) {
 						isLoggingEnabled = response.enabled;
 						if (response.levels) {
@@ -24,7 +36,9 @@
 					}
 				},
 			);
-		} catch (e) {}
+		} catch (e) {
+			debug("GET_CONFIG threw:", e);
+		}
 	}
 
 	updateConfig();
@@ -43,7 +57,9 @@
 			script,
 		);
 		script.onload = () => script.remove();
-	} catch (e) {}
+	} catch (e) {
+		debug("script injection failed:", e);
+	}
 
 	// Listen for messages from injected page script
 	window.addEventListener("message", (event) => {
@@ -79,18 +95,32 @@
 					timestamp: event.data.timestamp,
 				},
 				() => {
-					if (chrome.runtime.lastError) {}
+					if (chrome.runtime.lastError) {
+						debug(
+							"LOG message failed:",
+							chrome.runtime.lastError.message,
+						);
+					}
 				},
 			);
-		} catch (e) {}
+		} catch (e) {
+			debug("LOG message threw:", e);
+		}
 	});
 
 	try {
 		chrome.runtime.sendMessage(
 			{ type: "CONTENT_SCRIPT_READY", url: currentUrl },
 			() => {
-				if (chrome.runtime.lastError) {}
+				if (chrome.runtime.lastError) {
+					debug(
+						"CONTENT_SCRIPT_READY failed:",
+						chrome.runtime.lastError.message,
+					);
+				}
 			},
 		);
-	} catch (e) {}
+	} catch (e) {
+		debug("CONTENT_SCRIPT_READY threw:", e);
+	}
 })();

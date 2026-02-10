@@ -43,7 +43,9 @@
 					},
 					"*",
 				);
-			} catch (e) {}
+			} catch (e) {
+				orig.error("[devlog] page_inject wrap failed:", e);
+			}
 		};
 	}
 

@@ -5,10 +5,10 @@ REPO="jellydn/devlog"
 
 # Default to ~/.local/bin (user-writable), override with INSTALL_DIR
 if [ -z "$INSTALL_DIR" ]; then
-  if [ -w /usr/local/bin ]; then
+  INSTALL_DIR="${HOME}/.local/bin"
+  if [ -d /usr/local/bin ] && touch /usr/local/bin/.devlog_write_test 2>/dev/null; then
+    rm -f /usr/local/bin/.devlog_write_test
     INSTALL_DIR="/usr/local/bin"
-  else
-    INSTALL_DIR="${HOME}/.local/bin"
   fi
 fi
 

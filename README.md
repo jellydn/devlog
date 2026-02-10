@@ -86,17 +86,23 @@ browser:
 Then:
 
 ```sh
+devlog healthcheck  # Check system requirements
 devlog up
 ```
 
 ## CLI
 
-| Command         | Description                          |
-| --------------- | ------------------------------------ |
-| `devlog up`     | Start tmux session + browser logging |
-| `devlog down`   | Stop session, flush logs             |
-| `devlog status` | Show session state + log paths       |
-| `devlog open`   | Open logs directory in file manager  |
+| Command            | Description                          |
+| ------------------ | ------------------------------------ |
+| `devlog init`      | Create devlog.yml template           |
+| `devlog healthcheck` | Check system requirements          |
+| `devlog up`        | Start tmux session + browser logging |
+| `devlog down`      | Stop session, flush logs             |
+| `devlog attach`    | Attach to the running tmux session   |
+| `devlog status`    | Show session state + log paths       |
+| `devlog ls`        | List log runs                        |
+| `devlog open`      | Open logs directory in file manager  |
+| `devlog register`  | Register native messaging host       |
 
 `devlog up` will error if a session is already running. Use `devlog down` first.
 
@@ -158,6 +164,19 @@ Timestamped and level-tagged:
 - Go 1.25+
 - tmux
 - Chrome and/or Firefox
+
+**Verify your setup:**
+
+```sh
+devlog healthcheck
+```
+
+The healthcheck command verifies:
+- tmux is installed and accessible
+- devlog-host binary is available
+- Browser extension is registered (Chrome or Firefox)
+
+If any checks fail, the command provides instructions on how to fix them.
 
 ## License
 

@@ -102,34 +102,11 @@ import (
 - Exit with `os.Exit(1)` in `main()` for fatal errors
 - Use `t.Fatalf` for test setup errors, `t.Errorf` for assertions
 
-```go
-// Good
-return nil, fmt.Errorf("failed to read config file: %w", err)
-
-// Good
-if err := cmd(cfg, os.Args[2:]); err != nil {
-    fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-    os.Exit(1)
-}
-```
-
 ### Comments
 
 - Use `// ` for comments (space after slashes)
 - Start with capital letter for exported items
 - Document all exported types and functions
-
-```go
-// Config represents the devlog.yml configuration
-type Config struct {
-    // ...
-}
-
-// Load reads and parses the devlog.yml file
-func Load(path string) (*Config, error) {
-    // ...
-}
-```
 
 ### Testing
 
@@ -138,30 +115,7 @@ func Load(path string) (*Config, error) {
 - Set environment variables with `os.Setenv()` and defer cleanup
 - Test names should describe the scenario clearly
 
-```go
-func TestFunction_Scenario(t *testing.T) {
-    tests := []struct {
-        name    string
-        input   string
-        want    string
-        wantErr bool
-    }{
-        {
-            name:  "valid input",
-            input: "hello",
-            want:  "HELLO",
-        },
-    }
-
-    for _, tt := range tests {
-        t.Run(tt.name, func(t *testing.T) {
-            // test implementation
-        })
-    }
-}
-```
-
-### Project Structure
+## Project Structure
 
 ```
 .
@@ -177,13 +131,13 @@ func TestFunction_Scenario(t *testing.T) {
 └── devlog.yml.example   # Example configuration
 ```
 
-### Dependencies
+## Dependencies
 
 - Go 1.25.6+
 - Minimal external dependencies (currently only `gopkg.in/yaml.v3`)
 - Prefer standard library when possible
 
-### Configuration
+## Configuration
 
 - YAML config files named `devlog.yml`
 - Support environment variable interpolation (`$VAR` and `${VAR}`)

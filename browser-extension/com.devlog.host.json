@@ -1,0 +1,9 @@
+{
+  "name": "com.devlog.host",
+  "description": "devlog Native Messaging Host for Browser Log Capture",
+  "path": "{{HOST_PATH}}",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://{{EXTENSION_ID}}/"
+  ]
+}

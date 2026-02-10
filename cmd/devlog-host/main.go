@@ -9,8 +9,8 @@ import (
 	"os"
 	"strings"
 
-	"devlog/internal/logger"
-	"devlog/internal/natmsg"
+	"github.com/jellydn/devlog/internal/logger"
+	"github.com/jellydn/devlog/internal/natmsg"
 )
 
 const usage = `devlog-host - Native messaging host for browser console logs

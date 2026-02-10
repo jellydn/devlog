@@ -16,8 +16,23 @@ Zero-code log capture for local development. Captures server logs via tmux and b
 
 ## Install
 
+### Quick Install (curl)
+
 ```sh
-go install devlog/cmd/devlog@latest
+curl -fsSL https://raw.githubusercontent.com/jellydn/devlog/main/install.sh | sh
+```
+
+Or specify a version and install directory:
+
+```sh
+VERSION=v0.1.0 INSTALL_DIR=~/.local/bin curl -fsSL https://raw.githubusercontent.com/jellydn/devlog/main/install.sh | sh
+```
+
+### Go Install
+
+```sh
+go install github.com/jellydn/devlog/cmd/devlog@latest
+go install github.com/jellydn/devlog/cmd/devlog-host@latest
 ```
 
 ### Browser Extension (manual)

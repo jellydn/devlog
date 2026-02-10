@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"devlog/internal/natmsg"
+	"github.com/jellydn/devlog/internal/natmsg"
 )
 
 func TestNew_CreatesDirectory(t *testing.T) {

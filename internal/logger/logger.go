@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"devlog/internal/natmsg"
+	"github.com/jellydn/devlog/internal/natmsg"
 )
 
 // Logger writes browser console logs to a file with level filtering

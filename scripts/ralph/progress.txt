@@ -210,3 +210,21 @@
   - json.MarshalIndent produces prettier output than json.Marshal for manifest files
   - Chrome manifest uses "chrome-extension://{id}/" format for allowed_origins
   - Firefox manifest uses "allowed_extensions" array with extension IDs
+
+## 2026-02-10 - US-009 - Open logs directory command
+- What was implemented:
+  - Implemented actual file manager opening in openInFileManager() function
+  - Added os/exec import for executing system commands
+  - Commands now actually execute instead of just printing what they would do
+  - Uses exec.Command().Start() to launch the file manager asynchronously
+  - Platform-specific commands: "open" (macOS), "xdg-open" (Linux), "cmd /c start" (Windows)
+
+- Files changed:
+  - cmd/devlog/main.go - Implemented openInFileManager() with exec.Command
+  - scripts/ralph/prd.json - Marked US-009 as passing
+  - scripts/ralph/progress.txt - Added this progress entry
+
+- **Learnings for future iterations:**
+  - Use exec.Command().Start() for launching GUI apps asynchronously (non-blocking)
+  - Windows requires "cmd /c start" to properly launch Explorer from a subprocess
+  - Don't forget to add the exec import when using exec.Command

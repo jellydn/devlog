@@ -80,9 +80,11 @@ sync-extensions:
     cp browser-extension/page_inject.js browser-extension/chrome/
     cp browser-extension/popup.html browser-extension/chrome/
     cp browser-extension/popup.js browser-extension/chrome/
+    cp -r browser-extension/icons browser-extension/chrome/
     cp browser-extension/background.js browser-extension/firefox/
     cp browser-extension/content_script.js browser-extension/firefox/
     cp browser-extension/page_inject.js browser-extension/firefox/
     cp browser-extension/popup.html browser-extension/firefox/
     cp browser-extension/popup.js browser-extension/firefox/
+    cp -r browser-extension/icons browser-extension/firefox/
     @echo "✓ Browser extension files synced to chrome/ and firefox/"

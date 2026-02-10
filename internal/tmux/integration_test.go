@@ -12,19 +12,28 @@ import (
 	"time"
 )
 
-// TestTmuxIntegration_CreateSession tests creating a session with windows and panes
-func TestTmuxIntegration_CreateSession(t *testing.T) {
+// skipIfNoTmux skips the test if tmux is not available
+func skipIfNoTmux(t *testing.T) {
+	t.Helper()
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
-
-	// Check if tmux is available
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skip("tmux not available in PATH")
 	}
+}
+
+// generateTestSessionName creates a unique session name for test isolation
+func generateTestSessionName() string {
+	return fmt.Sprintf("devlog-test-%d", time.Now().UnixNano())
+}
+
+// TestTmuxIntegration_CreateSession tests creating a session with windows and panes
+func TestTmuxIntegration_CreateSession(t *testing.T) {
+	skipIfNoTmux(t)
 
 	// Use unique session name for test isolation
-	sessionName := fmt.Sprintf("devlog-test-%d", time.Now().UnixNano())
+	sessionName := generateTestSessionName()
 	runner := NewRunner(sessionName)
 
 	// Ensure cleanup
@@ -66,15 +75,9 @@ func TestTmuxIntegration_CreateSession(t *testing.T) {
 
 // TestTmuxIntegration_MultipleWindowsAndPanes tests creating a session with multiple windows and panes
 func TestTmuxIntegration_MultipleWindowsAndPanes(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
+	skipIfNoTmux(t)
 
-	if _, err := exec.LookPath("tmux"); err != nil {
-		t.Skip("tmux not available in PATH")
-	}
-
-	sessionName := fmt.Sprintf("devlog-test-%d", time.Now().UnixNano())
+	sessionName := generateTestSessionName()
 	runner := NewRunner(sessionName)
 
 	defer func() {
@@ -159,15 +162,9 @@ func TestTmuxIntegration_MultipleWindowsAndPanes(t *testing.T) {
 
 // TestTmuxIntegration_LogCapture tests that pipe-pane correctly captures output
 func TestTmuxIntegration_LogCapture(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
+	skipIfNoTmux(t)
 
-	if _, err := exec.LookPath("tmux"); err != nil {
-		t.Skip("tmux not available in PATH")
-	}
-
-	sessionName := fmt.Sprintf("devlog-test-%d", time.Now().UnixNano())
+	sessionName := generateTestSessionName()
 	runner := NewRunner(sessionName)
 
 	defer func() {
@@ -209,15 +206,9 @@ func TestTmuxIntegration_LogCapture(t *testing.T) {
 
 // TestTmuxIntegration_SessionLifecycle tests the full lifecycle of a session
 func TestTmuxIntegration_SessionLifecycle(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
+	skipIfNoTmux(t)
 
-	if _, err := exec.LookPath("tmux"); err != nil {
-		t.Skip("tmux not available in PATH")
-	}
-
-	sessionName := fmt.Sprintf("devlog-test-%d", time.Now().UnixNano())
+	sessionName := generateTestSessionName()
 	runner := NewRunner(sessionName)
 
 	// Session should not exist initially
@@ -274,15 +265,9 @@ func TestTmuxIntegration_SessionLifecycle(t *testing.T) {
 
 // TestTmuxIntegration_DuplicateSession tests error handling for duplicate session names
 func TestTmuxIntegration_DuplicateSession(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
+	skipIfNoTmux(t)
 
-	if _, err := exec.LookPath("tmux"); err != nil {
-		t.Skip("tmux not available in PATH")
-	}
-
-	sessionName := fmt.Sprintf("devlog-test-%d", time.Now().UnixNano())
+	sessionName := generateTestSessionName()
 	runner := NewRunner(sessionName)
 
 	defer func() {
@@ -319,15 +304,9 @@ func TestTmuxIntegration_DuplicateSession(t *testing.T) {
 
 // TestTmuxIntegration_SpecialCharactersInPaths tests handling of special characters in log paths
 func TestTmuxIntegration_SpecialCharactersInPaths(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
+	skipIfNoTmux(t)
 
-	if _, err := exec.LookPath("tmux"); err != nil {
-		t.Skip("tmux not available in PATH")
-	}
-
-	sessionName := fmt.Sprintf("devlog-test-%d", time.Now().UnixNano())
+	sessionName := generateTestSessionName()
 	runner := NewRunner(sessionName)
 
 	defer func() {
@@ -387,15 +366,9 @@ func TestTmuxIntegration_SpecialCharactersInPaths(t *testing.T) {
 
 // TestTmuxIntegration_EmptyLogFile tests panes without log files
 func TestTmuxIntegration_EmptyLogFile(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
+	skipIfNoTmux(t)
 
-	if _, err := exec.LookPath("tmux"); err != nil {
-		t.Skip("tmux not available in PATH")
-	}
-
-	sessionName := fmt.Sprintf("devlog-test-%d", time.Now().UnixNano())
+	sessionName := generateTestSessionName()
 	runner := NewRunner(sessionName)
 
 	defer func() {
@@ -436,15 +409,9 @@ func TestTmuxIntegration_EmptyLogFile(t *testing.T) {
 
 // TestTmuxIntegration_GetLogsDir tests retrieving the logs directory from session environment
 func TestTmuxIntegration_GetLogsDir(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
+	skipIfNoTmux(t)
 
-	if _, err := exec.LookPath("tmux"); err != nil {
-		t.Skip("tmux not available in PATH")
-	}
-
-	sessionName := fmt.Sprintf("devlog-test-%d", time.Now().UnixNano())
+	sessionName := generateTestSessionName()
 	runner := NewRunner(sessionName)
 
 	defer func() {
@@ -487,15 +454,9 @@ func TestTmuxIntegration_GetLogsDir(t *testing.T) {
 
 // TestTmuxIntegration_MultiplePanesSameLogFile tests multiple panes logging to the same file
 func TestTmuxIntegration_MultiplePanesSameLogFile(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
+	skipIfNoTmux(t)
 
-	if _, err := exec.LookPath("tmux"); err != nil {
-		t.Skip("tmux not available in PATH")
-	}
-
-	sessionName := fmt.Sprintf("devlog-test-%d", time.Now().UnixNano())
+	sessionName := generateTestSessionName()
 	runner := NewRunner(sessionName)
 
 	defer func() {
@@ -542,13 +503,7 @@ func TestTmuxIntegration_MultiplePanesSameLogFile(t *testing.T) {
 
 // TestTmuxIntegration_LongSessionName tests handling of very long session names
 func TestTmuxIntegration_LongSessionName(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
-
-	if _, err := exec.LookPath("tmux"); err != nil {
-		t.Skip("tmux not available in PATH")
-	}
+	skipIfNoTmux(t)
 
 	// Create a long but valid session name (tmux has limits)
 	sessionName := fmt.Sprintf("devlog-test-very-long-session-name-%d", time.Now().UnixNano())
@@ -590,15 +545,9 @@ func TestTmuxIntegration_LongSessionName(t *testing.T) {
 
 // TestTmuxIntegration_PaneCommands tests that different commands execute correctly
 func TestTmuxIntegration_PaneCommands(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
+	skipIfNoTmux(t)
 
-	if _, err := exec.LookPath("tmux"); err != nil {
-		t.Skip("tmux not available in PATH")
-	}
-
-	sessionName := fmt.Sprintf("devlog-test-%d", time.Now().UnixNano())
+	sessionName := generateTestSessionName()
 	runner := NewRunner(sessionName)
 
 	defer func() {

@@ -128,29 +128,9 @@ func formatTimestamp(v interface{}) string {
 			return parsed.Format("2006-01-02 15:04:05.000")
 		}
 		return t
+	case int, int64, uint, uint64:
+		return time.UnixMilli(toInt64(t)).Format("2006-01-02 15:04:05.000")
 	case float64:
-		return time.UnixMilli(int64(t)).Format("2006-01-02 15:04:05.000")
-	case float32:
-		return time.UnixMilli(int64(t)).Format("2006-01-02 15:04:05.000")
-	case int:
-		return time.UnixMilli(int64(t)).Format("2006-01-02 15:04:05.000")
-	case int8:
-		return time.UnixMilli(int64(t)).Format("2006-01-02 15:04:05.000")
-	case int16:
-		return time.UnixMilli(int64(t)).Format("2006-01-02 15:04:05.000")
-	case int32:
-		return time.UnixMilli(int64(t)).Format("2006-01-02 15:04:05.000")
-	case int64:
-		return time.UnixMilli(t).Format("2006-01-02 15:04:05.000")
-	case uint:
-		return time.UnixMilli(int64(t)).Format("2006-01-02 15:04:05.000")
-	case uint8:
-		return time.UnixMilli(int64(t)).Format("2006-01-02 15:04:05.000")
-	case uint16:
-		return time.UnixMilli(int64(t)).Format("2006-01-02 15:04:05.000")
-	case uint32:
-		return time.UnixMilli(int64(t)).Format("2006-01-02 15:04:05.000")
-	case uint64:
 		return time.UnixMilli(int64(t)).Format("2006-01-02 15:04:05.000")
 	case json.Number:
 		if n, err := t.Int64(); err == nil {
@@ -162,6 +142,21 @@ func formatTimestamp(v interface{}) string {
 		return t.String()
 	default:
 		return fmt.Sprintf("[unparsable timestamp: %v]", v)
+	}
+}
+
+func toInt64(v interface{}) int64 {
+	switch t := v.(type) {
+	case int:
+		return int64(t)
+	case int64:
+		return t
+	case uint:
+		return int64(t)
+	case uint64:
+		return int64(t)
+	default:
+		return 0
 	}
 }
 
@@ -179,41 +174,17 @@ func formatLoc(line, column interface{}) string {
 
 func toInt(v interface{}) int {
 	switch t := v.(type) {
-	case float64:
-		return int(t)
-	case float32:
-		return int(t)
 	case int:
 		return t
-	case int8:
-		return int(t)
-	case int16:
-		return int(t)
-	case int32:
-		return int(t)
 	case int64:
 		return int(t)
-	case uint:
-		return int(t)
-	case uint8:
-		return int(t)
-	case uint16:
-		return int(t)
-	case uint32:
-		return int(t)
-	case uint64:
+	case float64:
 		return int(t)
 	case json.Number:
-		n, err := t.Int64()
-		if err != nil {
-			return 0
-		}
+		n, _ := t.Int64()
 		return int(n)
 	case string:
-		n, err := strconv.Atoi(strings.TrimSpace(t))
-		if err != nil {
-			return 0
-		}
+		n, _ := strconv.Atoi(strings.TrimSpace(t))
 		return n
 	default:
 		return 0

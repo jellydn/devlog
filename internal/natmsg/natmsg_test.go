@@ -125,10 +125,7 @@ func TestHost_WriteResponse(t *testing.T) {
 	var output bytes.Buffer
 	host := NewHostWithStreams(&bytes.Buffer{}, &output)
 
-	response := map[string]interface{}{
-		"success": true,
-		"message": "ok",
-	}
+	response := Response{Success: true}
 
 	if err := host.WriteResponse(response); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -141,16 +138,13 @@ func TestHost_WriteResponse(t *testing.T) {
 	// Read JSON
 	jsonData := output.Bytes()[4 : 4+length]
 
-	var decoded map[string]interface{}
+	var decoded Response
 	if err := json.Unmarshal(jsonData, &decoded); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if decoded["success"] != true {
-		t.Errorf("success = %v, want true", decoded["success"])
-	}
-	if decoded["message"] != "ok" {
-		t.Errorf("message = %q, want %q", decoded["message"], "ok")
+	if decoded.Success != true {
+		t.Errorf("success = %v, want true", decoded.Success)
 	}
 }
 

@@ -64,31 +64,9 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Init command doesn't need config (creates one)
-	if command == "init" {
-		cmd, ok := commands[command]
-		if !ok {
-			fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n%s", command, usage)
-			os.Exit(1)
-		}
-		if err := cmd(nil, os.Args[2:]); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-		return
-	}
-
-	// Register command doesn't need config (just needs to find the binary)
-	if command == "register" {
-		cmd, ok := commands[command]
-		if !ok {
-			fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n%s", command, usage)
-			os.Exit(1)
-		}
-		if err := cmd(nil, os.Args[2:]); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
+	// Commands that don't need config
+	if command == "init" || command == "register" {
+		runCommandWithoutConfig(command)
 		return
 	}
 
@@ -114,6 +92,18 @@ func main() {
 	}
 
 	if err := cmd(cfg, os.Args[2:]); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func runCommandWithoutConfig(command string) {
+	cmd, ok := commands[command]
+	if !ok {
+		fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n%s", command, usage)
+		os.Exit(1)
+	}
+	if err := cmd(nil, os.Args[2:]); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
@@ -478,7 +468,6 @@ func cmdOpen(cfg *config.Config, args []string) error {
 		logsDir = cfg.LogsDir
 	}
 
-	// Create logs directory if it doesn't exist
 	if err := os.MkdirAll(logsDir, 0755); err != nil {
 		return fmt.Errorf("failed to create logs directory: %w", err)
 	}

@@ -8,6 +8,11 @@
 - Always skip tests if external dependencies (like tmux) are not available in PATH
 - Native messaging protocol: 4-byte length prefix (native endian) + JSON body
 - Use `binary.NativeEndian` for native byte order in native messaging protocol
+- Browser extensions: Use chrome.runtime.sendMessage for content-to-background communication
+- Browser extensions: Need separate manifests for Chrome (MV3) and Firefox (MV2)
+- Browser extensions: Content scripts inject in isolated world but can access page DOM
+- Browser extensions: chrome.runtime.onMessage.addListener for receiving messages (return true for async)
+- Browser extensions: Wrap console methods to preserve original behavior + capture logs
 
 ## 2026-02-10 - US-002 - CLI scaffold with up/down/status/open commands
 - What was implemented:
@@ -134,5 +139,44 @@
   - The host exits cleanly on EOF (browser closing connection)
   - io.ReadFull is needed to ensure complete reads of the length prefix and body
   - Use sync.Mutex in logger to handle concurrent writes from multiple browser tabs
+
+ ---
+
+## 2026-02-10 - US-007 - Browser extension manifest and content script
+- What was implemented:
+  - Created browser-extension directory with complete browser extension
+  - Implemented Chrome Manifest V3 and Firefox Manifest V2 configurations
+  - Created content_script.js to capture all console.* methods (log, info, warn, error, debug, trace)
+  - Added uncaught error and unhandled promise rejection capture
+  - Implemented background.js for native messaging connection management
+  - Created popup UI (popup.html/popup.js) to show extension status
+  - Added URL pattern matching for filtering which pages to log
+  - Included native host manifest templates for Chrome and Firefox
+  - Added comprehensive README with installation and development instructions
+
+- Files changed:
+  - browser-extension/manifest.json - Chrome Manifest V3
+  - browser-extension/manifest-firefox.json - Firefox Manifest V2
+  - browser-extension/background.js - Background script for native messaging
+  - browser-extension/content_script.js - Console log capture script
+  - browser-extension/popup.html - Extension popup UI
+  - browser-extension/popup.js - Popup logic
+  - browser-extension/com.devlog.host.json - Chrome native host manifest template
+  - browser-extension/com.devlog.host.firefox.json - Firefox native host manifest template
+  - browser-extension/icons/icon.svg - Extension icon
+  - browser-extension/README.md - Installation and usage documentation
+  - scripts/ralph/prd.json - Marked US-007 as passing
+  - scripts/ralph/progress.txt - Added this progress entry
+
+- **Learnings for future iterations:**
+  - Content scripts inject into isolated world but can access page DOM
+  - chrome.runtime.sendMessage is async and can reject if extension disconnects
+  - URL patterns use simple wildcard matching (* for any characters)
+  - Stack traces need parsing to extract source file, line, and column
+  - Console methods must be wrapped to preserve original behavior + capture logs
+  - Extensions need both manifest types for Chrome (MV3) and Firefox (MV2)
+  - Native messaging requires manifest files in OS-specific directories
+  - Service workers in MV3 are persistent but can be terminated; use onMessage for state
+  - Content scripts can use chrome.runtime.onMessage to receive config updates
 
 ---

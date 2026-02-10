@@ -199,6 +199,7 @@ tmux:
           log: server/api.log
 
 browser:
+  # Matches any port and path on localhost (e.g., http://localhost:3000/app)
   urls:
     - "http://localhost:*/*"
   file: browser/console.log
@@ -224,6 +225,7 @@ tmux:
           log: server.log
 
 browser:
+  # Matches any port and path on localhost (e.g., http://localhost:3000/app)
   urls:
     - "http://localhost:*/*"
   file: browser.log

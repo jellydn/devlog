@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -187,21 +188,17 @@ func (c *Config) CleanupOldRuns(dryRun bool) error {
 	}
 
 	// Sort by modification time (newest first)
-	for i := 0; i < len(dirs); i++ {
-		for j := i + 1; j < len(dirs); j++ {
-			if dirs[i].modTime.Before(dirs[j].modTime) {
-				dirs[i], dirs[j] = dirs[j], dirs[i]
-			}
-		}
-	}
+	sort.Slice(dirs, func(i, j int) bool {
+		return dirs[i].modTime.After(dirs[j].modTime)
+	})
 
 	// Determine which directories to remove
-	var toRemove []string
+	toRemove := make(map[string]bool)
 
 	// Apply max_runs policy
 	if c.MaxRuns > 0 && len(dirs) > c.MaxRuns {
 		for _, dir := range dirs[c.MaxRuns:] {
-			toRemove = append(toRemove, dir.entry.Name())
+			toRemove[dir.entry.Name()] = true
 		}
 	}
 
@@ -210,23 +207,13 @@ func (c *Config) CleanupOldRuns(dryRun bool) error {
 		cutoffTime := time.Now().AddDate(0, 0, -c.RetentionDays)
 		for _, dir := range dirs {
 			if dir.modTime.Before(cutoffTime) {
-				// Check if already in toRemove list
-				alreadyAdded := false
-				for _, name := range toRemove {
-					if name == dir.entry.Name() {
-						alreadyAdded = true
-						break
-					}
-				}
-				if !alreadyAdded {
-					toRemove = append(toRemove, dir.entry.Name())
-				}
+				toRemove[dir.entry.Name()] = true
 			}
 		}
 	}
 
 	// Remove directories
-	for _, name := range toRemove {
+	for name := range toRemove {
 		dirPath := filepath.Join(c.LogsDir, name)
 		if dryRun {
 			fmt.Printf("[DRY RUN] Would remove: %s\n", dirPath)

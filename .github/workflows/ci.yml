@@ -26,6 +26,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y tmux
 
       - name: Check formatting
+        shell: bash
         run: gofmt -l . | (! grep .)
 
       - name: Run vet
@@ -72,6 +73,7 @@ jobs:
         run: brew install tmux
 
       - name: Check formatting
+        shell: bash
         run: gofmt -l . | (! grep .)
 
       - name: Vet

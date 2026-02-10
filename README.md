@@ -177,13 +177,26 @@ browser-extension/
 ├── icons/               # Shared: Extension icons
 ├── chrome/
 │   ├── manifest.json    # Chrome-specific manifest (v3)
-│   └── (symlinks to shared files)
+│   └── (copies of shared files)
 └── firefox/
     ├── manifest.json    # Firefox-specific manifest (v2)
-    └── (symlinks to shared files)
+    └── (copies of shared files)
 ```
 
-Both Chrome and Firefox variants use symbolic links to the shared implementation files, reducing code duplication and ensuring consistent behavior across browsers. Only the `manifest.json` files differ to accommodate browser-specific requirements.
+The shared files in the root `browser-extension/` directory are the source of truth. The `chrome/` and `firefox/` directories contain copies of these files (not symlinks, as browsers don't follow symlinks when loading unpacked extensions).
+
+**Maintaining consistency:** After editing shared files, sync them to both browser directories:
+
+```sh
+just sync-extensions
+```
+
+Or manually:
+
+```sh
+cp browser-extension/{background,content_script,page_inject,popup}.{js,html} browser-extension/chrome/
+cp browser-extension/{background,content_script,page_inject,popup}.{js,html} browser-extension/firefox/
+```
 
 ## Requirements
 

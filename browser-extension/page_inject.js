@@ -44,7 +44,8 @@
 					"*",
 				);
 			} catch (e) {
-				orig.error("[devlog] page_inject wrap failed:", e);
+				// Using the original console.error to avoid an infinite loop if the wrapper is for `error`.
+				orig.error("[devlog] Error in wrap function:", e);
 			}
 		};
 	}

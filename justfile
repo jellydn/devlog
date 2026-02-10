@@ -71,3 +71,18 @@ devlog-dev:
 # Create devlog.yml from example
 init:
     cp devlog.yml.example devlog.yml
+
+# Sync browser extension files from shared source to Chrome and Firefox directories
+sync-extensions:
+    @echo "Syncing shared browser extension files..."
+    cp browser-extension/background.js browser-extension/chrome/
+    cp browser-extension/content_script.js browser-extension/chrome/
+    cp browser-extension/page_inject.js browser-extension/chrome/
+    cp browser-extension/popup.html browser-extension/chrome/
+    cp browser-extension/popup.js browser-extension/chrome/
+    cp browser-extension/background.js browser-extension/firefox/
+    cp browser-extension/content_script.js browser-extension/firefox/
+    cp browser-extension/page_inject.js browser-extension/firefox/
+    cp browser-extension/popup.html browser-extension/firefox/
+    cp browser-extension/popup.js browser-extension/firefox/
+    @echo "✓ Browser extension files synced to chrome/ and firefox/"

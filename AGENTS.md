@@ -30,6 +30,9 @@ go test -v ./...
 # Run a single test
 go test -run TestLoad_ValidConfig ./...
 
+# Run a single test with just
+just test-one TestLoad_ValidConfig
+
 # Run tests for a specific package
 go test ./internal/config/...
 
@@ -48,6 +51,15 @@ go fmt ./...
 
 # Vet code for issues
 go vet ./...
+
+# Run all linting (fmt + vet)
+just lint
+
+# Check compilation without building
+just check
+
+# Full CI pipeline
+just ci
 
 # If golangci-lint is available
 golangci-lint run
@@ -120,12 +132,20 @@ import (
 ```
 .
 ├── cmd/
-│   └── devlog/          # CLI entry point
+│   ├── devlog/          # CLI entry point
+│   │   └── main.go
+│   └── devlog-host/      # Native messaging host for browser integration
 │       └── main.go
 ├── internal/            # Private packages
-│   └── config/          # Config loading/validation
-│       ├── config.go
-│       └── config_test.go
+│   ├── config/          # Config loading/validation
+│   │   ├── config.go
+│   │   └── config_test.go
+│   ├── tmux/            # Tmux session management
+│   │   ├── tmux.go
+│   │   └── tmux_test.go
+│   └── natmsg/          # Native messaging protocol
+│       ├── natmsg.go
+│       └── natmsg_test.go
 ├── go.mod
 ├── go.sum
 └── devlog.yml.example   # Example configuration
@@ -137,9 +157,30 @@ import (
 - Minimal external dependencies (currently only `gopkg.in/yaml.v3`)
 - Prefer standard library when possible
 
+## Build Targets
+
+```bash
+# Build the main CLI binary
+go build -o devlog ./cmd/devlog
+
+# Build the native messaging host (for browser extension)
+go build -o devlog-host ./cmd/devlog-host
+
+# Install both binaries locally
+go install ./cmd/devlog
+go install ./cmd/devlog-host
+```
+
 ## Configuration
 
 - YAML config files named `devlog.yml`
 - Support environment variable interpolation (`$VAR` and `${VAR}`)
 - Required fields: `version`, `project`, `tmux.session`, `windows`, `panes`, `cmd`
 - Defaults: `logs_dir="./logs"`, `run_mode="timestamped"`
+
+## Initialize Project
+
+```bash
+# Create devlog.yml from the example template
+just init
+```

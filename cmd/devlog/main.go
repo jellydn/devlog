@@ -7,6 +7,7 @@ import (
 	"runtime"
 
 	"devlog/internal/config"
+	"devlog/internal/natmsg"
 	"devlog/internal/tmux"
 )
 
@@ -17,22 +18,25 @@ Commands:
   down     Stop tmux session and flush logs
   status   Show session state and log paths
   open     Open logs directory in file manager
+  register Register native messaging host for browser logging
   help     Show this help message
 
 Examples:
   devlog up
   devlog status
   devlog down
+  devlog register --chrome --extension-id abcdefghijklmnop
 `
 
 type Command func(cfg *config.Config, args []string) error
 
 var commands = map[string]Command{
-	"up":     cmdUp,
-	"down":   cmdDown,
-	"status": cmdStatus,
-	"open":   cmdOpen,
-	"help":   cmdHelp,
+	"up":       cmdUp,
+	"down":     cmdDown,
+	"status":   cmdStatus,
+	"open":     cmdOpen,
+	"help":     cmdHelp,
+	"register": cmdRegister,
 }
 
 func main() {
@@ -47,6 +51,20 @@ func main() {
 	if command == "help" || command == "--help" || command == "-h" {
 		cmdHelp(nil, nil)
 		os.Exit(0)
+	}
+
+	// Register command doesn't need config (just needs to find the binary)
+	if command == "register" {
+		cmd, ok := commands[command]
+		if !ok {
+			fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n%s", command, usage)
+			os.Exit(1)
+		}
+		if err := cmd(nil, os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
 	}
 
 	// Find config file
@@ -253,6 +271,85 @@ func cmdOpen(cfg *config.Config, args []string) error {
 
 func cmdHelp(cfg *config.Config, args []string) error {
 	fmt.Print(usage)
+	return nil
+}
+
+func cmdRegister(cfg *config.Config, args []string) error {
+	hostPath, err := natmsg.FindDevlogHostBinary()
+	if err != nil {
+		return fmt.Errorf("failed to find devlog-host binary: %w", err)
+	}
+
+	installChrome := false
+	installFirefox := false
+	extensionID := ""
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch arg {
+		case "--chrome":
+			installChrome = true
+		case "--firefox":
+			installFirefox = true
+		case "--extension-id":
+			if i+1 < len(args) {
+				extensionID = args[i+1]
+				i++
+			} else {
+				return fmt.Errorf("--extension-id requires a value")
+			}
+		case "--help", "-h":
+			fmt.Print(`Usage: devlog register [options]
+
+Register native messaging host for browser logging.
+
+Options:
+  --chrome         Register for Google Chrome
+  --firefox        Register for Mozilla Firefox
+  --extension-id   Chrome extension ID (required for --chrome)
+  --help, -h       Show this help message
+
+Examples:
+  devlog register --chrome --extension-id abcdefghijklmnopqrstuvwxyz123456
+  devlog register --firefox
+  devlog register --chrome --firefox --extension-id abcdefghijklmnopqrstuvwxyz123456
+`)
+			return nil
+		default:
+			return fmt.Errorf("unknown argument: %s (use --help for usage)", arg)
+		}
+	}
+
+	if !installChrome && !installFirefox {
+		installChrome = true
+		installFirefox = true
+	}
+
+	if installChrome && extensionID == "" {
+		return fmt.Errorf("--extension-id is required when registering for Chrome")
+	}
+
+	fmt.Printf("devlog-host binary: %s\n", hostPath)
+
+	if installChrome {
+		fmt.Printf("Registering for Chrome...\n")
+		if err := natmsg.InstallChromeManifest(hostPath, extensionID); err != nil {
+			return fmt.Errorf("failed to register Chrome manifest: %w", err)
+		}
+		dir := natmsg.GetChromeNativeMessagingDir()
+		fmt.Printf("  Installed to: %s\n", dir)
+	}
+
+	if installFirefox {
+		fmt.Printf("Registering for Firefox...\n")
+		if err := natmsg.InstallFirefoxManifest(hostPath); err != nil {
+			return fmt.Errorf("failed to register Firefox manifest: %w", err)
+		}
+		dir := natmsg.GetFirefoxNativeMessagingDir()
+		fmt.Printf("  Installed to: %s\n", dir)
+	}
+
+	fmt.Println("Registration complete!")
 	return nil
 }
 

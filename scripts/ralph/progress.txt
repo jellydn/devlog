@@ -13,6 +13,10 @@
 - Browser extensions: Content scripts inject in isolated world but can access page DOM
 - Browser extensions: chrome.runtime.onMessage.addListener for receiving messages (return true for async)
 - Browser extensions: Wrap console methods to preserve original behavior + capture logs
+- Commands that don't need config (like help, register) should be handled separately in main()
+- Native messaging manifests: Chrome uses "allowed_origins", Firefox uses "allowed_extensions"
+- Native messaging directories: Chrome uses "NativeMessagingHosts", Firefox uses "NativeMessagingHosts"
+- Find binary relative to current executable using os.Executable() + filepath.Dir()
 
 ## 2026-02-10 - US-002 - CLI scaffold with up/down/status/open commands
 - What was implemented:
@@ -180,3 +184,29 @@
   - Content scripts can use chrome.runtime.onMessage to receive config updates
 
 ---
+
+## 2026-02-10 - US-008 - Register native host manifest
+- What was implemented:
+  - Created internal/natmsg/manifest.go with native messaging manifest registration functions
+  - Added GetChromeNativeMessagingDir() and GetFirefoxNativeMessagingDir() for OS-specific paths
+  - Implemented InstallChromeManifest() and InstallFirefoxManifest() to generate and install manifests
+  - Added FindDevlogHostBinary() to locate the devlog-host binary relative to devlog binary
+  - Added cmdRegister command to CLI with --chrome, --firefox, and --extension-id flags
+  - Updated main.go to handle register command without requiring config file
+  - Updated usage string to document the new register command
+
+- Files changed:
+  - internal/natmsg/manifest.go - New manifest registration functions
+  - cmd/devlog/main.go - Added register command and updated main function
+  - scripts/ralph/prd.json - Marked US-008 as passing
+  - scripts/ralph/progress.txt - Added this progress entry
+
+- **Learnings for future iterations:**
+  - Native messaging manifests have different formats for Chrome (allowed_origins) and Firefox (allowed_extensions)
+  - Chrome requires extension ID in manifest, Firefox uses a simplified ID format (devlog@example.com)
+  - Native messaging directories are OS-specific (~/Library/Application Support/... on macOS)
+  - Register command should not require config file - it just needs to find the binary
+  - Use os.MkdirAll with 0755 permissions to create directories that may not exist
+  - json.MarshalIndent produces prettier output than json.Marshal for manifest files
+  - Chrome manifest uses "chrome-extension://{id}/" format for allowed_origins
+  - Firefox manifest uses "allowed_extensions" array with extension IDs

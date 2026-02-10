@@ -249,6 +249,11 @@ func cmdUp(cfg *config.Config, args []string) error {
 		return fmt.Errorf("tmux session '%s' already exists. Run 'devlog down' first or use 'tmux attach -t %s' to attach", cfg.Tmux.Session, cfg.Tmux.Session)
 	}
 
+	// Clean up old log runs if retention policy is configured
+	if err := cfg.CleanupOldRuns(false); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to cleanup old runs: %v\n", err)
+	}
+
 	// Convert config windows to tmux windows
 	windows := make([]tmux.WindowConfig, len(cfg.Tmux.Windows))
 	for i, w := range cfg.Tmux.Windows {

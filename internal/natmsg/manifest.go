@@ -166,7 +166,12 @@ func UpdateManifestPath(newPath string) error {
 	}
 
 	if len(updateErrors) > 0 {
-		return fmt.Errorf("failed to update one or more native messaging manifests: %s", strings.Join(updateErrors, "; "))
+		if updated {
+			// Some manifests were updated, but others failed
+			return fmt.Errorf("partially updated: some manifests succeeded but others failed: %s", strings.Join(updateErrors, "; "))
+		}
+		// All manifests that were found failed to update
+		return fmt.Errorf("failed to update native messaging manifests: %s", strings.Join(updateErrors, "; "))
 	}
 
 	if !updated {

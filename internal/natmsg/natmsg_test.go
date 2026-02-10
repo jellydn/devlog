@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
-	"fmt"
 	"io"
 	"testing"
 )
@@ -56,17 +55,18 @@ func TestHost_ReadMessage_Success(t *testing.T) {
 	if msg.URL != inputMsg.URL {
 		t.Errorf("URL = %q, want %q", msg.URL, inputMsg.URL)
 	}
-	if fmt.Sprintf("%v", msg.Timestamp) != fmt.Sprintf("%v", inputMsg.Timestamp) {
-		t.Errorf("Timestamp = %v, want %v", msg.Timestamp, inputMsg.Timestamp)
+	// Assert concrete types for interface{} fields
+	if ts, ok := msg.Timestamp.(float64); !ok || ts != inputMsg.Timestamp.(float64) {
+		t.Errorf("Timestamp = %v (%T), want %v (%T)", msg.Timestamp, msg.Timestamp, inputMsg.Timestamp, inputMsg.Timestamp)
 	}
 	if msg.Source != inputMsg.Source {
 		t.Errorf("Source = %q, want %q", msg.Source, inputMsg.Source)
 	}
-	if fmt.Sprintf("%v", msg.Line) != fmt.Sprintf("%v", inputMsg.Line) {
-		t.Errorf("Line = %v, want %v", msg.Line, inputMsg.Line)
+	if line, ok := msg.Line.(float64); !ok || line != inputMsg.Line.(float64) {
+		t.Errorf("Line = %v (%T), want %v (%T)", msg.Line, msg.Line, inputMsg.Line, inputMsg.Line)
 	}
-	if fmt.Sprintf("%v", msg.Column) != fmt.Sprintf("%v", inputMsg.Column) {
-		t.Errorf("Column = %v, want %v", msg.Column, inputMsg.Column)
+	if col, ok := msg.Column.(float64); !ok || col != inputMsg.Column.(float64) {
+		t.Errorf("Column = %v (%T), want %v (%T)", msg.Column, msg.Column, inputMsg.Column, inputMsg.Column)
 	}
 }
 

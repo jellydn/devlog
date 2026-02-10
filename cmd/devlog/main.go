@@ -283,7 +283,7 @@ func cmdUp(cfg *config.Config, args []string) error {
 	// Set up browser logging wrapper if configured
 	if len(cfg.Browser.URLs) > 0 && cfg.Browser.File != "" {
 		browserLogPath := filepath.Join(logsDir, cfg.Browser.File)
-		if err := writeBrowserHostWrapper(browserLogPath, cfg.Browser.Levels); err != nil {
+		if err := writeBrowserHostWrapper(cfg.Tmux.Session, browserLogPath, cfg.Browser.Levels); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to set up browser logging wrapper: %v\n", err)
 		} else {
 			fmt.Println("Browser logging: ready (wrapper updated)")
@@ -303,6 +303,7 @@ func cmdDown(cfg *config.Config, args []string) error {
 
 	// Check if session exists
 	if !runner.SessionExists() {
+		restoreBrowserHostWrapper(cfg.Tmux.Session)
 		return fmt.Errorf("tmux session '%s' does not exist", cfg.Tmux.Session)
 	}
 
@@ -312,7 +313,7 @@ func cmdDown(cfg *config.Config, args []string) error {
 	}
 
 	// Restore native messaging manifest to point to the real binary
-	restoreBrowserHostWrapper()
+	restoreBrowserHostWrapper(cfg.Tmux.Session)
 
 	fmt.Printf("Stopped tmux session '%s'\n", cfg.Tmux.Session)
 
@@ -569,23 +570,56 @@ Examples:
 		if err := natmsg.InstallFirefoxManifest(hostPath); err != nil {
 			return fmt.Errorf("failed to register Firefox manifest: %w", err)
 		}
-		dir := natmsg.GetFirefoxNativeMessagingDir()
-		fmt.Printf("  Installed to: %s\n", dir)
+		dirs := natmsg.GetFirefoxNativeMessagingDirs()
+		fmt.Printf("  Installed to:\n")
+		for _, dir := range dirs {
+			fmt.Printf("    - %s\n", dir)
+		}
 	}
 
 	fmt.Println("Registration complete!")
 	return nil
 }
 
-func browserHostWrapperPath() string {
+func browserHostWrapperPath(session string) string {
 	cacheDir, err := os.UserCacheDir()
 	if err != nil {
 		cacheDir = os.TempDir()
 	}
-	return filepath.Join(cacheDir, "devlog", "devlog-host-wrapper.sh")
+	return filepath.Join(
+		cacheDir,
+		"devlog",
+		"wrappers",
+		fmt.Sprintf("devlog-host-wrapper-%s.sh", sanitizeSessionForFileName(session)),
+	)
 }
 
-func writeBrowserHostWrapper(browserLogPath string, levels []string) error {
+func sanitizeSessionForFileName(session string) string {
+	if session == "" {
+		return "default"
+	}
+
+	var b strings.Builder
+	b.Grow(len(session))
+	for _, r := range session {
+		if (r >= 'a' && r <= 'z') ||
+			(r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') ||
+			r == '-' || r == '_' || r == '.' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('-')
+		}
+	}
+
+	out := strings.Trim(b.String(), "-")
+	if out == "" {
+		return "default"
+	}
+	return out
+}
+
+func writeBrowserHostWrapper(session string, browserLogPath string, levels []string) error {
 	hostPath, err := natmsg.FindDevlogHostBinary()
 	if err != nil {
 		return err
@@ -596,7 +630,7 @@ func writeBrowserHostWrapper(browserLogPath string, levels []string) error {
 		return err
 	}
 
-	wrapperPath := browserHostWrapperPath()
+	wrapperPath := browserHostWrapperPath(session)
 	if err := os.MkdirAll(filepath.Dir(wrapperPath), 0755); err != nil {
 		return err
 	}
@@ -618,13 +652,19 @@ func writeBrowserHostWrapper(browserLogPath string, levels []string) error {
 	return nil
 }
 
-func restoreBrowserHostWrapper() {
+func restoreBrowserHostWrapper(session string) {
 	hostPath, err := natmsg.FindDevlogHostBinary()
 	if err != nil {
 		return
 	}
-	natmsg.UpdateManifestPath(hostPath)
-	os.Remove(browserHostWrapperPath())
+
+	wrapperPath := browserHostWrapperPath(session)
+	inUse, err := natmsg.IsManifestPathInUse(wrapperPath)
+	if err == nil && inUse {
+		natmsg.UpdateManifestPath(hostPath)
+	}
+
+	os.Remove(wrapperPath)
 }
 
 // openInFileManager opens the given path in the system file manager

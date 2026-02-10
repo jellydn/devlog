@@ -557,9 +557,9 @@ func TestCleanupOldRuns_NoPolicy(t *testing.T) {
 	}
 
 	cfg := &Config{
-		LogsDir: logsDir,
-		RunMode: "timestamped",
-		MaxRuns: 0,
+		LogsDir:       logsDir,
+		RunMode:       "timestamped",
+		MaxRuns:       0,
 		RetentionDays: 0,
 	}
 

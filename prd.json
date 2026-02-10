@@ -57,7 +57,7 @@
         "Gracefully terminate pane processes",
         "Error if session doesn't exist"
       ],
-      "passes": false,
+      "passes": true,
       "priority": 4
     },
     {

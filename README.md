@@ -105,16 +105,16 @@ Timestamped and level-tagged:
 
 ```
 ┌─────────────┐      stdout/stderr      ┌──────────────┐
-│ tmux panes  │ ──────────────────────▶ │ log files     │
-│ (dev cmds)  │                         │ server/*.log  │
+│ tmux panes  │ ──────────────────────▶ │ log files    │
+│ (dev cmds)  │                         │ server/*.log │
 └─────────────┘                         └──────────────┘
                                                 ▲
                         Native Messaging (stdin)│
                                                 │
-┌───────────────┐  console logs  ┌──────────────┴────────┐
+┌───────────────┐  console logs  ┌──────────────┴───────── ┐
 │ Browser Tab   │ ─────────────▶ │ Extension + Native Host│
 └───────────────┘                │ → browser/*.log        │
-                                 └───────────────────────┘
+                                 └────────────────────────┘
 ```
 
 - **CLI** (`devlog`): Go binary. Manages tmux sessions, registers native host manifest.

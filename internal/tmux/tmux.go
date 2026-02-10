@@ -148,18 +148,61 @@ func (r *Runner) sendCommandWithLogging(target, command, logsDir, logFile string
 	return nil
 }
 
-// KillSession kills the tmux session
+// KillSession gracefully terminates all panes and kills the tmux session
 func (r *Runner) KillSession() error {
 	if !r.SessionExists() {
 		return fmt.Errorf("tmux session '%s' does not exist", r.sessionName)
 	}
 
+	// Step 1: Get all pane IDs in the session
+	paneIDs, err := r.getPaneIDs()
+	if err != nil {
+		return fmt.Errorf("failed to get pane list: %w", err)
+	}
+
+	// Step 2: Send Ctrl+C to all panes to gracefully terminate processes
+	for _, paneID := range paneIDs {
+		target := fmt.Sprintf("%s:%s", r.sessionName, paneID)
+		cmd := exec.Command("tmux", "send-keys", "-t", target, "C-c")
+		cmd.Run() // Ignore errors - pane might not have a process
+	}
+
+	// Step 3: Wait briefly for processes to terminate
+	// Use tmux's built-in mechanism to wait a bit
+	exec.Command("tmux", "send-keys", "-t", r.sessionName, "sleep 0.5", "C-m").Run()
+
+	// Step 4: Force kill any remaining processes with C-c again
+	for _, paneID := range paneIDs {
+		target := fmt.Sprintf("%s:%s", r.sessionName, paneID)
+		cmd := exec.Command("tmux", "send-keys", "-t", target, "C-c")
+		cmd.Run()
+	}
+
+	// Step 5: Kill the session (this will close all panes and flush logs)
 	cmd := exec.Command("tmux", "kill-session", "-t", r.sessionName)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to kill tmux session: %w", err)
 	}
 
 	return nil
+}
+
+// getPaneIDs returns all pane IDs in the session
+func (r *Runner) getPaneIDs() ([]string, error) {
+	cmd := exec.Command("tmux", "list-panes", "-t", r.sessionName, "-F", "#{pane_id}")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	lines := strings.Split(string(output), "\n")
+	var ids []string
+	for _, line := range lines {
+		if line != "" {
+			ids = append(ids, line)
+		}
+	}
+	return ids, nil
 }
 
 // GetSessionInfo returns information about the session

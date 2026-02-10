@@ -624,12 +624,14 @@ func writeBrowserHostWrapper(session string, browserLogPath string, levels []str
 		return err
 	}
 
-	args := fmt.Sprintf("%q %q", hostPath, absLogPath)
-	if len(levels) > 0 {
-		args += " " + strings.Join(levels, " ")
+	// Build script with proper shell escaping using positional parameters
+	// Use "$@" to safely pass arguments without re-parsing by the shell
+	var scriptArgs []string
+	scriptArgs = append(scriptArgs, shellQuote(hostPath), shellQuote(absLogPath))
+	for _, level := range levels {
+		scriptArgs = append(scriptArgs, shellQuote(level))
 	}
-
-	script := fmt.Sprintf("#!/bin/sh\nexec %s\n", args)
+	script := fmt.Sprintf("#!/bin/sh\nexec %s\n", strings.Join(scriptArgs, " "))
 	if err := os.WriteFile(wrapperPath, []byte(script), 0755); err != nil {
 		return err
 	}
@@ -654,6 +656,15 @@ func restoreBrowserHostWrapper(session string) {
 	}
 
 	os.Remove(wrapperPath)
+}
+
+// shellQuote returns a shell-escaped version of the string using single quotes.
+// Any single quotes in the input are escaped as '\”' to safely include them.
+func shellQuote(s string) string {
+	if s == "" {
+		return "''"
+	}
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 
 // openInFileManager opens the given path in the system file manager

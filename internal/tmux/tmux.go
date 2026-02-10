@@ -50,7 +50,12 @@ func (r *Runner) CreateSession(logsDir string, windows []WindowConfig) error {
 	}
 
 	// Store logs directory as a tmux session environment variable for later retrieval
-	setEnv := exec.Command("tmux", "set-environment", "-t", r.sessionName, "DEVLOG_LOGS_DIR", logsDir)
+	// Convert to absolute path to ensure consistent resolution from any working directory
+	absLogsDir, err := filepath.Abs(logsDir)
+	if err != nil {
+		return fmt.Errorf("failed to resolve absolute path for logs dir: %w", err)
+	}
+	setEnv := exec.Command("tmux", "set-environment", "-t", r.sessionName, "DEVLOG_LOGS_DIR", absLogsDir)
 	if err := setEnv.Run(); err != nil {
 		return fmt.Errorf("failed to set logs dir env: %w", err)
 	}
@@ -122,7 +127,9 @@ func (r *Runner) sendCommandWithLogging(target, command, logsDir, logFile string
 	if logFile != "" {
 		logPath := filepath.Join(logsDir, logFile)
 
-		pipeCmd := fmt.Sprintf("cat >> %s", logPath)
+		// Quote the path to prevent command injection
+		escapedPath := "'" + strings.ReplaceAll(logPath, "'", "'\\''") + "'"
+		pipeCmd := fmt.Sprintf("cat >> %s", escapedPath)
 		cmd := exec.Command("tmux", "pipe-pane", "-t", target, "-o", pipeCmd)
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("failed to set up pipe-pane logging: %w", err)

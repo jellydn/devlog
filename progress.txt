@@ -3,6 +3,9 @@
 - Store commands in a map for easy routing: `var commands = map[string]Command{...}`
 - Config file is searched in current directory and parent directories (findConfigFile)
 - Use runtime.GOOS for OS-specific behavior (not os.Getenv)
+- Use `internal/` packages for private implementation (e.g., internal/tmux, internal/config)
+- Runner pattern for external tool wrappers: create a Runner struct with methods for operations
+- Always skip tests if external dependencies (like tmux) are not available in PATH
 
 ## 2026-02-10 - US-002 - CLI scaffold with up/down/status/open commands
 - What was implemented:
@@ -24,5 +27,33 @@
   - fmt.Fprintln with a string ending in newline causes vet warning - use fmt.Fprint instead
   - Use runtime.GOOS, not os.Getenv("GOOS") for OS detection
   - Commands are currently stubs - next stories (US-003+) will implement actual tmux integration
+
+---
+
+## 2026-02-10 - US-003 - Create tmux session with windows and panes
+- What was implemented:
+  - Created internal/tmux package with Runner type for tmux operations
+  - Implemented CreateSession() to create tmux sessions with configured windows and panes
+  - Implemented KillSession() to stop tmux sessions
+  - Implemented GetSessionInfo() to retrieve session status and window info
+  - Implemented SessionExists() to check if a session already exists
+  - Commands are sent to panes with output redirected to log files using tee
+  - Updated cmdUp, cmdDown, and cmdStatus to use the tmux package
+  - Added comprehensive tests for all tmux operations
+
+- Files changed:
+  - internal/tmux/tmux.go - New tmux session management package
+  - internal/tmux/tmux_test.go - Tests for tmux operations
+  - cmd/devlog/main.go - Integrated tmux package into CLI commands
+  - prd.json - Marked US-003 as passing
+  - progress.txt - Added this progress entry
+
+- **Learnings for future iterations:**
+  - tmux window indices start from 1, not 0
+  - tmux send-keys targets should use window names (e.g., `session:windowname`) not indices
+  - After split-window, the new pane becomes the active pane
+  - fmt.Sscanf doesn't support %[^|] pattern - use strings.Split instead
+  - Use tee -a for log files to append output and display to terminal
+  - Always check if tmux is available in PATH before running tests
 
 ---

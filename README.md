@@ -29,7 +29,7 @@ Create a `devlog.yml` in your project root:
 version: 1
 project: my-app
 logs_dir: ./logs
-run_mode: timestamped   # timestamped | overwrite
+run_mode: timestamped # timestamped | overwrite
 
 tmux:
   session: my-app
@@ -60,7 +60,7 @@ devlog up
 ## CLI
 
 | Command         | Description                          |
-|-----------------|--------------------------------------|
+| --------------- | ------------------------------------ |
 | `devlog up`     | Start tmux session + browser logging |
 | `devlog down`   | Stop session, flush logs             |
 | `devlog status` | Show session state + log paths       |
@@ -109,7 +109,7 @@ Timestamped and level-tagged:
 │ (dev cmds)  │                         │ server/*.log  │
 └─────────────┘                         └──────────────┘
                                                 ▲
-                        Native Messaging (stdin) │
+                        Native Messaging (stdin)│
                                                 │
 ┌───────────────┐  console logs  ┌──────────────┴────────┐
 │ Browser Tab   │ ─────────────▶ │ Extension + Native Host│

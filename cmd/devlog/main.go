@@ -7,6 +7,7 @@ import (
 	"runtime"
 
 	"devlog/internal/config"
+	"devlog/internal/tmux"
 )
 
 const usage = `Usage: devlog <command> [args...]
@@ -104,8 +105,38 @@ func cmdUp(cfg *config.Config, args []string) error {
 	fmt.Printf("Starting devlog session '%s'...\n", cfg.Tmux.Session)
 	fmt.Printf("Logs will be written to: %s\n", cfg.ResolveLogsDir())
 
-	// TODO: Implement actual tmux session creation (US-003)
-	fmt.Println("(tmux session creation not yet implemented)")
+	// Create tmux runner
+	runner := tmux.NewRunner(cfg.Tmux.Session)
+
+	// Check if session already exists
+	if runner.SessionExists() {
+		return fmt.Errorf("tmux session '%s' already exists. Run 'devlog down' first or use 'tmux attach -t %s' to attach", cfg.Tmux.Session, cfg.Tmux.Session)
+	}
+
+	// Convert config windows to tmux windows
+	windows := make([]tmux.WindowConfig, len(cfg.Tmux.Windows))
+	for i, w := range cfg.Tmux.Windows {
+		panes := make([]tmux.PaneConfig, len(w.Panes))
+		for j, p := range w.Panes {
+			panes[j] = tmux.PaneConfig{
+				Cmd: p.Cmd,
+				Log: p.Log,
+			}
+		}
+		windows[i] = tmux.WindowConfig{
+			Name:  w.Name,
+			Panes: panes,
+		}
+	}
+
+	// Create the tmux session
+	logsDir := cfg.ResolveLogsDir()
+	if err := runner.CreateSession(logsDir, windows); err != nil {
+		return fmt.Errorf("failed to create tmux session: %w", err)
+	}
+
+	fmt.Printf("Created tmux session '%s' with %d window(s)\n", cfg.Tmux.Session, len(windows))
+	fmt.Printf("Attach with: tmux attach -t %s\n", cfg.Tmux.Session)
 
 	return nil
 }
@@ -113,8 +144,20 @@ func cmdUp(cfg *config.Config, args []string) error {
 func cmdDown(cfg *config.Config, args []string) error {
 	fmt.Printf("Stopping devlog session '%s'...\n", cfg.Tmux.Session)
 
-	// TODO: Implement actual tmux session cleanup (US-004)
-	fmt.Println("(tmux session cleanup not yet implemented)")
+	// Create tmux runner
+	runner := tmux.NewRunner(cfg.Tmux.Session)
+
+	// Check if session exists
+	if !runner.SessionExists() {
+		return fmt.Errorf("tmux session '%s' does not exist", cfg.Tmux.Session)
+	}
+
+	// Kill the session
+	if err := runner.KillSession(); err != nil {
+		return err
+	}
+
+	fmt.Printf("Stopped tmux session '%s'\n", cfg.Tmux.Session)
 
 	return nil
 }
@@ -125,8 +168,37 @@ func cmdStatus(cfg *config.Config, args []string) error {
 	fmt.Printf("Logs directory: %s\n", cfg.ResolveLogsDir())
 	fmt.Printf("Run mode: %s\n", cfg.RunMode)
 
-	// TODO: Check actual tmux session status (US-005)
-	fmt.Println("\n(tmux session status check not yet implemented)")
+	// Create tmux runner
+	runner := tmux.NewRunner(cfg.Tmux.Session)
+
+	// Check session status
+	if !runner.SessionExists() {
+		fmt.Println("\nStatus: Not running")
+		return nil
+	}
+
+	// Get session info
+	info, err := runner.GetSessionInfo()
+	if err != nil {
+		return fmt.Errorf("failed to get session info: %w", err)
+	}
+
+	fmt.Println("\nStatus: Running")
+	fmt.Printf("Windows (%d):\n", len(info.Windows))
+	for _, w := range info.Windows {
+		fmt.Printf("  - %s (%d panes)\n", w.Name, w.PaneCount)
+	}
+
+	// Show log files
+	logsDir := cfg.ResolveLogsDir()
+	fmt.Println("\nLog files:")
+	for _, w := range cfg.Tmux.Windows {
+		for _, p := range w.Panes {
+			if p.Log != "" {
+				fmt.Printf("  %s/%s\n", logsDir, p.Log)
+			}
+		}
+	}
 
 	return nil
 }

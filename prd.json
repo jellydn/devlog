@@ -44,7 +44,7 @@
         "Capture stdout/stderr to log files",
         "Error if session already exists"
       ],
-      "passes": false,
+      "passes": true,
       "priority": 3
     },
     {

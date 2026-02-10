@@ -1,0 +1,35 @@
+version: 2
+
+builds:
+  - id: devlog
+    main: ./cmd/devlog
+    binary: devlog
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+
+  - id: devlog-host
+    main: ./cmd/devlog-host
+    binary: devlog-host
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+
+archives:
+  - id: devlog
+    builds: [devlog, devlog-host]
+    format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"

@@ -1,4 +1,4 @@
-module devlog
+module github.com/jellydn/devlog
 
 go 1.25.6
 

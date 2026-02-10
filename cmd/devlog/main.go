@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"devlog/internal/config"
-	"devlog/internal/natmsg"
-	"devlog/internal/tmux"
+	"github.com/jellydn/devlog/internal/config"
+	"github.com/jellydn/devlog/internal/natmsg"
+	"github.com/jellydn/devlog/internal/tmux"
 )
 
 const usage = `Usage: devlog <command> [args...]

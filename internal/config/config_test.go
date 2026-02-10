@@ -297,8 +297,9 @@ func TestConfig_ResolveLogsDir_Timestamped(t *testing.T) {
 	}
 
 	dir := cfg.ResolveLogsDir()
-	if !strings.HasPrefix(dir, "logs/") {
-		t.Errorf("ResolveLogsDir() = %q, want prefix 'logs/'", dir)
+	expectedPrefix := filepath.Join("logs", "")
+	if !strings.HasPrefix(dir, expectedPrefix) {
+		t.Errorf("ResolveLogsDir() = %q, want prefix %q", dir, expectedPrefix)
 	}
 }
 

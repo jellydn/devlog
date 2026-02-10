@@ -8,11 +8,11 @@ const NATIVE_HOST_NAME = "com.devlog.host";
 let nativePort = null;
 let isNativeHostConnected = false;
 
-// Configuration (set by the devlog CLI)
+// Configuration - auto-enabled with sensible defaults
 let config = {
-	enabled: false,
-	urls: [],
-	levels: ["error", "warn", "info", "log", "debug", "trace"],
+	enabled: true,
+	urls: ["http://localhost:*/*", "http://127.0.0.1:*/*"],
+	levels: ["error", "warn", "info", "log"],
 	file: "browser.log",
 };
 
@@ -94,12 +94,23 @@ function isUrlEnabled(url) {
 
 // Handle messages from content scripts
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+	if (message.type === "GET_STATUS") {
+		sendResponse({
+			enabled: config.enabled,
+			connected: isNativeHostConnected,
+			urls: config.urls,
+			levels: config.levels,
+		});
+		return true;
+	}
+
 	if (message.type === "GET_CONFIG") {
 		// Content script is requesting configuration
 		const enabled = isUrlEnabled(message.url);
 		sendResponse({
 			enabled: enabled,
 			levels: config.levels,
+			urls: config.urls,
 			hostName: NATIVE_HOST_NAME,
 		});
 		return true;
@@ -135,11 +146,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 		// Notify all tabs to update their config
 		chrome.tabs.query({}, (tabs) => {
 			tabs.forEach((tab) => {
-				chrome.tabs
-					.sendMessage(tab.id, { type: "CONFIG_UPDATED" })
-					.catch(() => {
-						// Ignore errors for tabs without content script
+				try {
+					chrome.tabs.sendMessage(tab.id, { type: "CONFIG_UPDATED" }, () => {
+						if (chrome.runtime.lastError) {
+							// Ignore errors for tabs without content script
+						}
 					});
+				} catch (e) {
+					// Ignore
+				}
 			});
 		});
 
@@ -157,10 +172,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 	return false;
 });
 
-// Initialize connection on startup if enabled
-if (config.enabled) {
-	connectToNativeHost();
-}
+// Initialize connection on startup if enabled (deferred to avoid blocking script load)
+setTimeout(() => {
+	if (config.enabled) {
+		connectToNativeHost();
+	}
+}, 100);
 
 // Listen for browser action click (Chrome Manifest V3)
 if (chrome.action) {

@@ -1,34 +1,40 @@
-// popup.js - Handles the extension popup UI
-
 document.addEventListener("DOMContentLoaded", () => {
 	const statusEl = document.getElementById("status");
 	const urlsEl = document.getElementById("urls");
+	const footerEl = document.getElementById("footer");
 
-	// Request current status from background script
-	chrome.runtime.sendMessage(
-		{ type: "GET_CONFIG", url: window.location.href },
-		(response) => {
-			if (response) {
-				if (response.enabled) {
-					statusEl.textContent = "Browser logging enabled";
-					statusEl.className = "status enabled";
-				} else {
-					statusEl.textContent = "Browser logging disabled";
-					statusEl.className = "status disabled";
-				}
+	chrome.runtime.sendMessage({ type: "GET_STATUS" }, (response) => {
+		if (chrome.runtime.lastError || !response) {
+			statusEl.textContent = "Unable to connect";
+			statusEl.className = "status disabled";
+			footerEl.textContent = "Extension error";
+			return;
+		}
 
-				// Display configured URLs
-				if (response.urls && response.urls.length > 0) {
-					const ul = document.createElement("ul");
-					response.urls.forEach((url) => {
-						const li = document.createElement("li");
-						li.textContent = url;
-						ul.appendChild(li);
-					});
-					urlsEl.innerHTML = "";
-					urlsEl.appendChild(ul);
-				}
-			}
-		},
-	);
+		if (response.enabled && response.connected) {
+			statusEl.textContent = "Browser logging active";
+			statusEl.className = "status enabled";
+			footerEl.textContent = "Native host connected";
+		} else if (response.enabled) {
+			statusEl.textContent = "Enabled (host not connected)";
+			statusEl.className = "status disabled";
+			footerEl.textContent =
+				"Run: devlog register --chrome --extension-id <id>";
+		} else {
+			statusEl.textContent = "Browser logging disabled";
+			statusEl.className = "status disabled";
+			footerEl.textContent = "Logging is off";
+		}
+
+		if (response.urls && response.urls.length > 0) {
+			const ul = document.createElement("ul");
+			response.urls.forEach((url) => {
+				const li = document.createElement("li");
+				li.textContent = url;
+				ul.appendChild(li);
+			});
+			urlsEl.innerHTML = "";
+			urlsEl.appendChild(ul);
+		}
+	});
 });

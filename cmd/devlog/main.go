@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/jellydn/devlog/internal/config"
 	"github.com/jellydn/devlog/internal/natmsg"
@@ -18,7 +19,9 @@ Commands:
   init     Create a devlog.yml template in current directory
   up       Start tmux session and browser logging
   down     Stop tmux session and flush logs
+  attach   Attach to the running tmux session
   status   Show session state and log paths
+  ls       List log runs
   open     Open logs directory in file manager
   register Register native messaging host for browser logging
   help     Show this help message
@@ -26,7 +29,9 @@ Commands:
 Examples:
   devlog init
   devlog up
+  devlog attach
   devlog status
+  devlog ls
   devlog down
   devlog register --chrome --extension-id abcdefghijklmnop
 `
@@ -37,7 +42,9 @@ var commands = map[string]Command{
 	"init":     cmdInit,
 	"up":       cmdUp,
 	"down":     cmdDown,
+	"attach":   cmdAttach,
 	"status":   cmdStatus,
+	"ls":       cmdLs,
 	"open":     cmdOpen,
 	"help":     cmdHelp,
 	"register": cmdRegister,
@@ -57,31 +64,9 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Init command doesn't need config (creates one)
-	if command == "init" {
-		cmd, ok := commands[command]
-		if !ok {
-			fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n%s", command, usage)
-			os.Exit(1)
-		}
-		if err := cmd(nil, os.Args[2:]); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-		return
-	}
-
-	// Register command doesn't need config (just needs to find the binary)
-	if command == "register" {
-		cmd, ok := commands[command]
-		if !ok {
-			fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n%s", command, usage)
-			os.Exit(1)
-		}
-		if err := cmd(nil, os.Args[2:]); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
+	// Commands that don't need config
+	if command == "init" || command == "register" {
+		runCommandWithoutConfig(command)
 		return
 	}
 
@@ -107,6 +92,18 @@ func main() {
 	}
 
 	if err := cmd(cfg, os.Args[2:]); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func runCommandWithoutConfig(command string) {
+	cmd, ok := commands[command]
+	if !ok {
+		fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n%s", command, usage)
+		os.Exit(1)
+	}
+	if err := cmd(nil, os.Args[2:]); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
@@ -272,7 +269,18 @@ func cmdUp(cfg *config.Config, args []string) error {
 	}
 
 	fmt.Printf("Created tmux session '%s' with %d window(s)\n", cfg.Tmux.Session, len(windows))
-	fmt.Printf("Attach with: tmux attach -t %s\n", cfg.Tmux.Session)
+
+	// Set up browser logging wrapper if configured
+	if len(cfg.Browser.URLs) > 0 && cfg.Browser.File != "" {
+		browserLogPath := filepath.Join(logsDir, cfg.Browser.File)
+		if err := writeBrowserHostWrapper(cfg.Tmux.Session, browserLogPath, cfg.Browser.Levels); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to set up browser logging wrapper: %v\n", err)
+		} else {
+			fmt.Println("Browser logging: ready (wrapper updated)")
+		}
+	}
+
+	fmt.Printf("Attach with: devlog attach\n")
 
 	return nil
 }
@@ -285,6 +293,7 @@ func cmdDown(cfg *config.Config, args []string) error {
 
 	// Check if session exists
 	if !runner.SessionExists() {
+		restoreBrowserHostWrapper(cfg.Tmux.Session)
 		return fmt.Errorf("tmux session '%s' does not exist", cfg.Tmux.Session)
 	}
 
@@ -293,15 +302,31 @@ func cmdDown(cfg *config.Config, args []string) error {
 		return err
 	}
 
+	// Restore native messaging manifest to point to the real binary
+	restoreBrowserHostWrapper(cfg.Tmux.Session)
+
 	fmt.Printf("Stopped tmux session '%s'\n", cfg.Tmux.Session)
 
 	return nil
 }
 
+func cmdAttach(cfg *config.Config, args []string) error {
+	runner := tmux.NewRunner(cfg.Tmux.Session)
+
+	if !runner.SessionExists() {
+		return fmt.Errorf("tmux session '%s' is not running. Run 'devlog up' first", cfg.Tmux.Session)
+	}
+
+	cmd := exec.Command("tmux", "attach", "-t", cfg.Tmux.Session)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
 func cmdStatus(cfg *config.Config, args []string) error {
 	fmt.Printf("Project: %s\n", cfg.Project)
 	fmt.Printf("Session: %s\n", cfg.Tmux.Session)
-	fmt.Printf("Logs directory: %s\n", cfg.ResolveLogsDir())
 	fmt.Printf("Run mode: %s\n", cfg.RunMode)
 
 	// Create tmux runner
@@ -312,6 +337,13 @@ func cmdStatus(cfg *config.Config, args []string) error {
 		fmt.Println("\nStatus: Not running")
 		return nil
 	}
+
+	// Resolve logs directory from the running session
+	logsDir := runner.GetLogsDir()
+	if logsDir == "" {
+		logsDir = cfg.ResolveLogsDir()
+	}
+	fmt.Printf("Logs directory: %s\n", logsDir)
 
 	// Get session info
 	info, err := runner.GetSessionInfo()
@@ -329,15 +361,14 @@ func cmdStatus(cfg *config.Config, args []string) error {
 	}
 
 	// Show log files
-	logsDir := cfg.ResolveLogsDir()
 	fmt.Println("\nLog files:")
 	for _, w := range cfg.Tmux.Windows {
 		for _, p := range w.Panes {
 			if p.Log != "" {
 				logPath := filepath.Join(logsDir, p.Log)
 				status := "missing"
-				if _, err := os.Stat(logPath); err == nil {
-					status = "exists"
+				if fi, err := os.Stat(logPath); err == nil {
+					status = fmt.Sprintf("%d bytes", fi.Size())
 				}
 				fmt.Printf("  %s (%s)\n", logPath, status)
 			}
@@ -355,8 +386,8 @@ func cmdStatus(cfg *config.Config, args []string) error {
 		if cfg.Browser.File != "" {
 			browserLogPath := filepath.Join(logsDir, cfg.Browser.File)
 			status := "missing"
-			if _, err := os.Stat(browserLogPath); err == nil {
-				status = "exists"
+			if fi, err := os.Stat(browserLogPath); err == nil {
+				status = fmt.Sprintf("%d bytes", fi.Size())
 			}
 			fmt.Printf("  Log file: %s (%s)\n", browserLogPath, status)
 		}
@@ -370,10 +401,73 @@ func cmdStatus(cfg *config.Config, args []string) error {
 	return nil
 }
 
-func cmdOpen(cfg *config.Config, args []string) error {
-	logsDir := cfg.ResolveLogsDir()
+func cmdLs(cfg *config.Config, args []string) error {
+	logsDir := cfg.LogsDir
 
-	// Create logs directory if it doesn't exist
+	entries, err := os.ReadDir(logsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Printf("No log runs found (logs directory '%s' does not exist)\n", logsDir)
+			return nil
+		}
+		return fmt.Errorf("failed to read logs directory: %w", err)
+	}
+
+	var dirs []os.DirEntry
+	for _, e := range entries {
+		if e.IsDir() {
+			dirs = append(dirs, e)
+		}
+	}
+
+	if cfg.RunMode == "timestamped" {
+		if len(dirs) == 0 {
+			fmt.Println("No log runs found")
+			return nil
+		}
+		fmt.Printf("Log runs in %s (%d):\n", logsDir, len(dirs))
+		for _, d := range dirs {
+			info, err := d.Info()
+			if err != nil {
+				fmt.Printf("  %s\n", d.Name())
+				continue
+			}
+			logFiles := countFiles(filepath.Join(logsDir, d.Name()))
+			fmt.Printf("  %s  (%d files, %s)\n", d.Name(), logFiles, info.ModTime().Format("Jan 02 15:04"))
+		}
+	} else {
+		files := countFiles(logsDir)
+		fmt.Printf("Logs directory: %s (%d files)\n", logsDir, files)
+	}
+
+	return nil
+}
+
+func countFiles(dir string) int {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0
+	}
+	count := 0
+	for _, e := range entries {
+		if !e.IsDir() {
+			count++
+		}
+	}
+	return count
+}
+
+func cmdOpen(cfg *config.Config, args []string) error {
+	runner := tmux.NewRunner(cfg.Tmux.Session)
+
+	logsDir := ""
+	if runner.SessionExists() {
+		logsDir = runner.GetLogsDir()
+	}
+	if logsDir == "" {
+		logsDir = cfg.LogsDir
+	}
+
 	if err := os.MkdirAll(logsDir, 0755); err != nil {
 		return fmt.Errorf("failed to create logs directory: %w", err)
 	}
@@ -439,7 +533,9 @@ Examples:
 	}
 
 	if !installChrome && !installFirefox {
-		installChrome = true
+		if extensionID != "" {
+			installChrome = true
+		}
 		installFirefox = true
 	}
 
@@ -463,12 +559,112 @@ Examples:
 		if err := natmsg.InstallFirefoxManifest(hostPath); err != nil {
 			return fmt.Errorf("failed to register Firefox manifest: %w", err)
 		}
-		dir := natmsg.GetFirefoxNativeMessagingDir()
-		fmt.Printf("  Installed to: %s\n", dir)
+		dirs := natmsg.GetFirefoxNativeMessagingDirs()
+		fmt.Printf("  Installed to:\n")
+		for _, dir := range dirs {
+			fmt.Printf("    - %s\n", dir)
+		}
 	}
 
 	fmt.Println("Registration complete!")
 	return nil
+}
+
+func browserHostWrapperPath(session string) string {
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		cacheDir = os.TempDir()
+	}
+	return filepath.Join(
+		cacheDir,
+		"devlog",
+		"wrappers",
+		fmt.Sprintf("devlog-host-wrapper-%s.sh", sanitizeSessionForFileName(session)),
+	)
+}
+
+func sanitizeSessionForFileName(session string) string {
+	if session == "" {
+		return "default"
+	}
+
+	var b strings.Builder
+	b.Grow(len(session))
+	for _, r := range session {
+		if (r >= 'a' && r <= 'z') ||
+			(r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') ||
+			r == '-' || r == '_' || r == '.' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('-')
+		}
+	}
+
+	out := strings.Trim(b.String(), "-")
+	if out == "" {
+		return "default"
+	}
+	return out
+}
+
+func writeBrowserHostWrapper(session string, browserLogPath string, levels []string) error {
+	hostPath, err := natmsg.FindDevlogHostBinary()
+	if err != nil {
+		return err
+	}
+
+	absLogPath, err := filepath.Abs(browserLogPath)
+	if err != nil {
+		return err
+	}
+
+	wrapperPath := browserHostWrapperPath(session)
+	if err := os.MkdirAll(filepath.Dir(wrapperPath), 0755); err != nil {
+		return err
+	}
+
+	// Build script with proper shell escaping using positional parameters
+	// Use "$@" to safely pass arguments without re-parsing by the shell
+	var scriptArgs []string
+	scriptArgs = append(scriptArgs, shellQuote(hostPath), shellQuote(absLogPath))
+	for _, level := range levels {
+		scriptArgs = append(scriptArgs, shellQuote(level))
+	}
+	script := fmt.Sprintf("#!/bin/sh\nexec %s\n", strings.Join(scriptArgs, " "))
+	if err := os.WriteFile(wrapperPath, []byte(script), 0755); err != nil {
+		return err
+	}
+
+	if err := natmsg.UpdateManifestPath(wrapperPath); err != nil {
+		return fmt.Errorf("failed to update native messaging manifest: %w", err)
+	}
+
+	return nil
+}
+
+func restoreBrowserHostWrapper(session string) {
+	hostPath, err := natmsg.FindDevlogHostBinary()
+	if err != nil {
+		return
+	}
+
+	wrapperPath := browserHostWrapperPath(session)
+	inUse, err := natmsg.IsManifestPathInUse(wrapperPath)
+	if err == nil && inUse {
+		natmsg.UpdateManifestPath(hostPath)
+	}
+
+	os.Remove(wrapperPath)
+}
+
+// shellQuote returns a shell-escaped version of the string using single quotes.
+// Any single quotes in the input are escaped as '\”' to safely include them.
+func shellQuote(s string) string {
+	if s == "" {
+		return "''"
+	}
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 
 // openInFileManager opens the given path in the system file manager

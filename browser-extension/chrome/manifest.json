@@ -27,6 +27,12 @@
     "48": "icons/icon.svg",
     "128": "icons/icon.svg"
   },
+  "web_accessible_resources": [
+    {
+      "resources": ["page_inject.js"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {

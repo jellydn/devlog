@@ -1,10 +1,12 @@
 package logger
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jellydn/devlog/internal/natmsg"
 )
@@ -161,10 +163,10 @@ func TestLog_FormatsMessage(t *testing.T) {
 		Level:     "error",
 		Message:   "Something went wrong",
 		URL:       "http://example.com/page",
-		Timestamp: 1704067200000, // 2024-01-01 00:00:00.000
+		Timestamp: float64(1704067200000), // 2024-01-01 00:00:00.000
 		Source:    "app.js",
-		Line:      42,
-		Column:    10,
+		Line:      float64(42),
+		Column:    float64(10),
 	}
 
 	if err := logger.Log(msg); err != nil {
@@ -247,7 +249,7 @@ func TestLog_NoSourceInfo(t *testing.T) {
 		Level:     "log",
 		Message:   "Simple message",
 		URL:       "http://example.com",
-		Timestamp: 1234567890000,
+		Timestamp: float64(1234567890000),
 		// No Source, Line, or Column
 	}
 
@@ -312,5 +314,34 @@ func TestLogPath(t *testing.T) {
 
 	if logger.LogPath() != logPath {
 		t.Errorf("LogPath() = %q, want %q", logger.LogPath(), logPath)
+	}
+}
+
+func TestFormatTimestamp_Int(t *testing.T) {
+	got := formatTimestamp(1704067200000)
+	want := time.UnixMilli(1704067200000).Format("2006-01-02 15:04:05.000")
+	if got != want {
+		t.Fatalf("formatTimestamp(int) = %q, want %q", got, want)
+	}
+}
+
+func TestFormatTimestamp_JSONNumber(t *testing.T) {
+	got := formatTimestamp(json.Number("1704067200000"))
+	want := time.UnixMilli(1704067200000).Format("2006-01-02 15:04:05.000")
+	if got != want {
+		t.Fatalf("formatTimestamp(json.Number) = %q, want %q", got, want)
+	}
+}
+
+func TestFormatTimestamp_UnparsableType(t *testing.T) {
+	got := formatTimestamp(struct{ A int }{A: 1})
+	if !strings.HasPrefix(got, "[unparsable timestamp:") {
+		t.Fatalf("formatTimestamp(unparsable) = %q, want placeholder", got)
+	}
+}
+
+func TestToInt_StringStrict(t *testing.T) {
+	if got := toInt("123xyz"); got != 0 {
+		t.Fatalf("toInt(\"123xyz\") = %d, want 0", got)
 	}
 }

@@ -28,10 +28,10 @@ func TestHost_ReadMessage_Success(t *testing.T) {
 		Level:     "error",
 		Message:   "Test error message",
 		URL:       "http://example.com",
-		Timestamp: 1234567890,
+		Timestamp: float64(1234567890),
 		Source:    "app.js",
-		Line:      42,
-		Column:    10,
+		Line:      float64(42),
+		Column:    float64(10),
 	}
 
 	data := encodeMessage(t, inputMsg)
@@ -55,17 +55,18 @@ func TestHost_ReadMessage_Success(t *testing.T) {
 	if msg.URL != inputMsg.URL {
 		t.Errorf("URL = %q, want %q", msg.URL, inputMsg.URL)
 	}
-	if msg.Timestamp != inputMsg.Timestamp {
-		t.Errorf("Timestamp = %d, want %d", msg.Timestamp, inputMsg.Timestamp)
+	// Assert concrete types for interface{} fields
+	if ts, ok := msg.Timestamp.(float64); !ok || ts != inputMsg.Timestamp.(float64) {
+		t.Errorf("Timestamp = %v (%T), want %v (%T)", msg.Timestamp, msg.Timestamp, inputMsg.Timestamp, inputMsg.Timestamp)
 	}
 	if msg.Source != inputMsg.Source {
 		t.Errorf("Source = %q, want %q", msg.Source, inputMsg.Source)
 	}
-	if msg.Line != inputMsg.Line {
-		t.Errorf("Line = %d, want %d", msg.Line, inputMsg.Line)
+	if line, ok := msg.Line.(float64); !ok || line != inputMsg.Line.(float64) {
+		t.Errorf("Line = %v (%T), want %v (%T)", msg.Line, msg.Line, inputMsg.Line, inputMsg.Line)
 	}
-	if msg.Column != inputMsg.Column {
-		t.Errorf("Column = %d, want %d", msg.Column, inputMsg.Column)
+	if col, ok := msg.Column.(float64); !ok || col != inputMsg.Column.(float64) {
+		t.Errorf("Column = %v (%T), want %v (%T)", msg.Column, msg.Column, inputMsg.Column, inputMsg.Column)
 	}
 }
 
@@ -124,10 +125,7 @@ func TestHost_WriteResponse(t *testing.T) {
 	var output bytes.Buffer
 	host := NewHostWithStreams(&bytes.Buffer{}, &output)
 
-	response := map[string]interface{}{
-		"success": true,
-		"message": "ok",
-	}
+	response := Response{Success: true}
 
 	if err := host.WriteResponse(response); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -140,16 +138,13 @@ func TestHost_WriteResponse(t *testing.T) {
 	// Read JSON
 	jsonData := output.Bytes()[4 : 4+length]
 
-	var decoded map[string]interface{}
+	var decoded Response
 	if err := json.Unmarshal(jsonData, &decoded); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if decoded["success"] != true {
-		t.Errorf("success = %v, want true", decoded["success"])
-	}
-	if decoded["message"] != "ok" {
-		t.Errorf("message = %q, want %q", decoded["message"], "ok")
+	if decoded.Success != true {
+		t.Errorf("success = %v, want true", decoded.Success)
 	}
 }
 

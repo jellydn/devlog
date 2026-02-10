@@ -3,6 +3,12 @@
   "name": "devlog - Browser Log Capture",
   "version": "1.0.0",
   "description": "Captures browser console logs and sends them to devlog native host",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "devlog@devlog.local",
+      "strict_min_version": "109.0"
+    }
+  },
   "permissions": [
     "nativeMessaging",
     "storage",

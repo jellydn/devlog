@@ -1,9 +1,0 @@
-{
-  "name": "com.devlog.host",
-  "description": "devlog Native Messaging Host for Browser Log Capture",
-  "path": "{{HOST_PATH}}",
-  "type": "stdio",
-  "allowed_extensions": [
-    "devlog@example.com"
-  ]
-}

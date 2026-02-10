@@ -22,8 +22,21 @@ go install devlog/cmd/devlog@latest
 
 ### Browser Extension (manual)
 
-1. Chrome: Load unpacked from `extension/chrome/`
-2. Firefox: Load temporary add-on from `extension/firefox/`
+#### Chrome
+
+1. Open Chrome and navigate to `chrome://extensions/`
+2. Enable "Developer mode" (toggle in top right)
+3. Click "Load unpacked"
+4. Select the `browser-extension/chrome` directory
+5. The extension icon should appear in your toolbar
+
+#### Firefox
+
+1. Open Firefox and navigate to `about:debugging`
+2. Click "This Firefox" (or "This Nightly" for Developer Edition)
+3. Click "Load Temporary Add-on"
+4. Select the `browser-extension/firefox` directory
+5. The extension icon should appear in your toolbar
 
 ## Quick Start
 

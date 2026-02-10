@@ -59,6 +59,15 @@ check:
 # Run full CI checks (lint + test)
 ci: lint test
 
+# Build and symlink to ~/.local/bin for easy testing
+devlog-dev:
+    go build -o devlog ./cmd/devlog
+    go build -o devlog-host ./cmd/devlog-host
+    mkdir -p ~/.local/bin
+    ln -sf {{justfile_directory()}}/devlog ~/.local/bin/devlog
+    ln -sf {{justfile_directory()}}/devlog-host ~/.local/bin/devlog-host
+    @echo "Symlinked devlog -> ~/.local/bin/devlog"
+
 # Create devlog.yml from example
 init:
     cp devlog.yml.example devlog.yml

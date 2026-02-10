@@ -11,9 +11,15 @@ go build -o devlog ./cmd/devlog
 # Build native messaging host
 go build -o devlog-host ./cmd/devlog-host
 
+# Build both binaries and symlink to ~/.local/bin for easy testing
+just devlog-dev
+
 # Install both binaries locally
 go install ./cmd/devlog
 go install ./cmd/devlog-host
+
+# Verify code compiles without building
+just check
 
 # Clean build artifacts
 rm -f devlog devlog-host
@@ -28,8 +34,9 @@ go test ./...
 # Run with verbose output
 go test -v ./...
 
-# Run a single test
+# Run a single test by name
 go test -run TestLoad_ValidConfig ./...
+just test-one TestLoad_ValidConfig
 
 # Run with coverage
 go test -cover ./...
@@ -43,6 +50,9 @@ go test -race ./...
 ```bash
 # Format code
 go fmt ./...
+
+# Check formatting without modifying files
+gofmt -l .
 
 # Vet code for issues
 go vet ./...
@@ -59,7 +69,7 @@ golangci-lint run
 
 ### Imports
 
-Standard library first, then third-party. No blank lines between groups. Use full import paths.
+Standard library first, then third-party. No blank lines between groups.
 
 ```go
 import (
@@ -71,33 +81,26 @@ import (
 )
 ```
 
-### Formatting
+### Formatting, Types, Naming
 
-Use `gofmt` for formatting. Tabs for indentation. Aim for 100 characters max. No trailing whitespace.
-
-### Types
-
-Use structs with YAML tags (`yaml:"field_name"`). Use pointer receivers for methods that modify the struct. Define custom types for command functions: `type Command func(cfg *config.Config, args []string) error`.
-
-### Naming Conventions
+Use `gofmt`. Tabs for indentation. 100 chars max. No trailing whitespace. Use structs with YAML tags. Pointer receivers for methods modifying structs.
 
 - **Packages**: lowercase, no underscores (`config`, `tmux`)
 - **Functions**: CamelCase (`Load`, `ResolveLogsDir`, `cmdUp`)
 - **Variables**: camelCase (`configPath`, `logsDir`)
-- **Constants**: CamelCase for exported, camelCase for unexported
 - **Tests**: `TestFunctionName_Description` (`TestLoad_ValidConfig`)
 
 ### Error Handling
 
-Wrap errors with context: `fmt.Errorf("failed to read config: %w", err)`. Error messages start with lowercase. Return errors instead of logging in library code. Use `t.Fatalf` for test setup errors, `t.Errorf` for assertions.
+Wrap errors: `fmt.Errorf("failed to read config: %w", err)`. Error messages start lowercase. Return errors in library code. Use `t.Fatalf` for test setup, `t.Errorf` for assertions.
 
 ### Comments
 
-Use `// ` for comments (space after slashes). Start with capital letter for exported items. Document all exported types and functions.
+Use `// ` (space after slashes). Capitalize exported items. Document all exported types/functions.
 
 ### Testing
 
-Use table-driven tests with `tests := []struct{...}`. Use `t.TempDir()` for temporary directories. Test names should describe the scenario clearly.
+Table-driven tests with `tests := []struct{...}`. Use `t.Run(tt.name, func(t *testing.T) {...})`. Use `t.TempDir()`.
 
 ## Project Structure
 
@@ -121,6 +124,13 @@ Use table-driven tests with `tests := []struct{...}`. Use `t.TempDir()` for temp
 │   └── logger/           # Logging utilities
 │       ├── logger.go
 │       └── logger_test.go
+├── browser-extension/    # Shared extension source files
+│   ├── background.js     # Native messaging communication
+│   ├── content_script.js # Bridges page and background script
+│   ├── page_inject.js    # Console capture logic
+│   ├── popup.js/html     # Extension popup UI
+├── chrome/               # Chrome extension (copies of shared files)
+├── firefox/              # Firefox extension (copies of shared files)
 ├── go.mod
 ├── go.sum
 └── devlog.yml.example    # Example configuration
@@ -143,4 +153,12 @@ Use table-driven tests with `tests := []struct{...}`. Use `t.TempDir()` for temp
 ```bash
 # Create devlog.yml from the example template
 just init
+```
+
+## Browser Extension Maintenance
+
+The browser extension uses shared source files in `browser-extension/` that are copied to both `chrome/` and `firefox/` directories. After editing shared files, sync them:
+
+```bash
+just sync-extensions
 ```

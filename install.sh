@@ -2,7 +2,15 @@
 set -e
 
 REPO="jellydn/devlog"
-INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
+
+# Default to ~/.local/bin (user-writable), override with INSTALL_DIR
+if [ -z "$INSTALL_DIR" ]; then
+  if [ -w /usr/local/bin ]; then
+    INSTALL_DIR="/usr/local/bin"
+  else
+    INSTALL_DIR="${HOME}/.local/bin"
+  fi
+fi
 
 # Detect OS
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -22,15 +30,19 @@ esac
 
 # Get version
 if [ -z "$VERSION" ]; then
-  VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+  VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
 fi
 
 if [ -z "$VERSION" ]; then
-  echo "Error: Could not determine latest version" >&2
+  echo "Error: Could not determine latest version." >&2
+  echo "No releases found at https://github.com/${REPO}/releases" >&2
+  echo "" >&2
+  echo "To install from source instead:" >&2
+  echo "  go install github.com/${REPO}/cmd/devlog@latest" >&2
+  echo "  go install github.com/${REPO}/cmd/devlog-host@latest" >&2
   exit 1
 fi
 
-VERSION_NO_V="${VERSION#v}"
 FILENAME="devlog_${OS}_${ARCH}.tar.gz"
 URL="https://github.com/${REPO}/releases/download/${VERSION}/${FILENAME}"
 
@@ -42,10 +54,23 @@ trap 'rm -rf "$TMPDIR"' EXIT
 curl -fsSL "$URL" -o "${TMPDIR}/${FILENAME}"
 tar -xzf "${TMPDIR}/${FILENAME}" -C "$TMPDIR"
 
-install -m 755 "${TMPDIR}/devlog" "${INSTALL_DIR}/devlog"
-install -m 755 "${TMPDIR}/devlog-host" "${INSTALL_DIR}/devlog-host"
+mkdir -p "${INSTALL_DIR}"
+cp "${TMPDIR}/devlog" "${INSTALL_DIR}/devlog"
+cp "${TMPDIR}/devlog-host" "${INSTALL_DIR}/devlog-host"
+chmod 755 "${INSTALL_DIR}/devlog" "${INSTALL_DIR}/devlog-host"
 
 echo "Installed devlog to ${INSTALL_DIR}/devlog"
 echo "Installed devlog-host to ${INSTALL_DIR}/devlog-host"
+
+# Check if INSTALL_DIR is in PATH
+case ":$PATH:" in
+  *":${INSTALL_DIR}:"*) ;;
+  *)
+    echo ""
+    echo "NOTE: ${INSTALL_DIR} is not in your PATH. Add it with:"
+    echo "  export PATH=\"${INSTALL_DIR}:\$PATH\""
+    ;;
+esac
+
 echo ""
 echo "Run 'devlog help' to get started."

@@ -41,6 +41,14 @@ test-cover:
 test-race:
     go test -race ./...
 
+# Run integration tests
+test-integration:
+    go test -tags=integration ./internal/tmux/
+
+# Run integration tests with verbose output
+test-integration-v:
+    go test -v -tags=integration ./internal/tmux/
+
 # Format code
 fmt:
     go fmt ./...

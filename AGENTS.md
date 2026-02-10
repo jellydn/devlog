@@ -36,7 +36,34 @@ go test -cover ./...
 
 # Run with race detection
 go test -race ./...
+
+# Run integration tests
+go test -tags=integration ./internal/tmux/
+
+# Run integration tests with verbose output
+go test -v -tags=integration ./internal/tmux/
+
+# Skip integration tests (for fast development)
+go test -short -tags=integration ./internal/tmux/
 ```
+
+### Integration Tests
+
+Integration tests for tmux operations are located in `internal/tmux/integration_test.go` and use the build tag `integration`. These tests:
+
+- Require a real tmux installation
+- Create and destroy actual tmux sessions
+- Verify log file creation and content
+- Test edge cases like special characters and long session names
+- Are automatically skipped with the `-short` flag
+
+Run integration tests locally:
+```bash
+just test-integration      # Run integration tests
+just test-integration-v    # Run with verbose output
+```
+
+CI automatically runs both unit tests and integration tests.
 
 ## Lint Commands
 

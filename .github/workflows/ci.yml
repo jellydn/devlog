@@ -14,9 +14,13 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+      - name: Install tmux
+        run: sudo apt-get update && sudo apt-get install -y tmux
       - run: gofmt -l . | (! grep .)
         name: Check formatting
       - run: go vet ./...
         name: Vet
       - run: go test ./...
         name: Test
+      - run: go test -tags=integration ./internal/tmux/
+        name: Integration Tests

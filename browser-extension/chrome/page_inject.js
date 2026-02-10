@@ -43,7 +43,10 @@
 					},
 					"*",
 				);
-			} catch (e) {}
+			} catch (e) {
+				// Using the original console.error to avoid an infinite loop if the wrapper is for `error`.
+				orig.error("[devlog] Error in wrap function:", e);
+			}
 		};
 	}
 

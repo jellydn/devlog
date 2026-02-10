@@ -37,7 +37,7 @@
 				},
 			);
 		} catch (e) {
-			console.error("devlog: GET_CONFIG threw:", e);
+			debug("GET_CONFIG threw:", e);
 		}
 	}
 
@@ -104,7 +104,7 @@
 				},
 			);
 		} catch (e) {
-			console.error("devlog: Error sending message:", e);
+			debug("LOG message threw:", e);
 		}
 	});
 
@@ -121,6 +121,6 @@
 			},
 		);
 	} catch (e) {
-		console.error("devlog: CONTENT_SCRIPT_READY threw:", e);
+		debug("CONTENT_SCRIPT_READY threw:", e);
 	}
 })();

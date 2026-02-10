@@ -1,23 +1,82 @@
 ## Codebase Patterns
-- Use `go test ./...` to run all tests
-- Config package is in `internal/config/` following Go standard layout
-- YAML parsing uses `gopkg.in/yaml.v3`
+- Use `Command` type for CLI subcommands: `type Command func(cfg *config.Config, args []string) error`
+- Store commands in a map for easy routing: `var commands = map[string]Command{...}`
+- Config file is searched in current directory and parent directories (findConfigFile)
+- Use runtime.GOOS for OS-specific behavior (not os.Getenv)
+- Use `internal/` packages for private implementation (e.g., internal/tmux, internal/config)
+- Runner pattern for external tool wrappers: create a Runner struct with methods for operations
+- Always skip tests if external dependencies (like tmux) are not available in PATH
 
-# Ralph Progress Log
-Started: Tue Feb 10 19:08:13 +08 2026
+## 2026-02-10 - US-002 - CLI scaffold with up/down/status/open commands
+- What was implemented:
+  - Refactored main.go to use a Command type and command map pattern
+  - Implemented cmdUp, cmdDown, cmdStatus, cmdOpen, cmdHelp functions
+  - Added findConfigFile() to search for devlog.yml in current and parent directories
+  - Added usage string with help text
+  - Commands now load config before executing (except help)
+  - Added runtime.GOOS detection for cross-platform file manager opening
+  
+- Files changed:
+  - cmd/devlog/main.go - complete refactor of CLI structure
+  - prd.json - created with user stories
+  - progress.txt - created with this progress
+
+- **Learnings for future iterations:**
+  - The command pattern with `type Command func(cfg *config.Config, args []string) error` works well for subcommands
+  - Searching parent directories for config file is a nice UX touch
+  - fmt.Fprintln with a string ending in newline causes vet warning - use fmt.Fprint instead
+  - Use runtime.GOOS, not os.Getenv("GOOS") for OS detection
+  - Commands are currently stubs - next stories (US-003+) will implement actual tmux integration
+
 ---
 
-## Tue Feb 10 19:30:00 +08 2026 - US-001
-- Implemented YAML configuration parsing with env var interpolation
+## 2026-02-10 - US-003 - Create tmux session with windows and panes
+- What was implemented:
+  - Created internal/tmux package with Runner type for tmux operations
+  - Implemented CreateSession() to create tmux sessions with configured windows and panes
+  - Implemented KillSession() to stop tmux sessions
+  - Implemented GetSessionInfo() to retrieve session status and window info
+  - Implemented SessionExists() to check if a session already exists
+  - Commands are sent to panes with output redirected to log files using tee
+  - Updated cmdUp, cmdDown, and cmdStatus to use the tmux package
+  - Added comprehensive tests for all tmux operations
+
 - Files changed:
-  - `go.mod` - Initialized Go module
-  - `internal/config/config.go` - Config struct and parsing logic
-  - `internal/config/config_test.go` - Comprehensive tests
-  - `cmd/devlog/main.go` - Entry point for CLI
-  - `devlog.yml.example` - Example configuration file
+  - internal/tmux/tmux.go - New tmux session management package
+  - internal/tmux/tmux_test.go - Tests for tmux operations
+  - cmd/devlog/main.go - Integrated tmux package into CLI commands
+  - prd.json - Marked US-003 as passing
+  - progress.txt - Added this progress entry
+
 - **Learnings for future iterations:**
-  - Environment variable interpolation supports both `$VAR` and `${VAR}` syntax
-  - Config validation returns clear error messages for missing fields
-  - `ResolveLogsDir()` handles both timestamped and overwrite run modes
-  - The config structure: version, project, logs_dir, run_mode, tmux (session/windows/panes), browser (urls/file/levels)
+  - tmux window indices start from 1, not 0
+  - tmux send-keys targets should use window names (e.g., `session:windowname`) not indices
+  - After split-window, the new pane becomes the active pane
+  - fmt.Sscanf doesn't support %[^|] pattern - use strings.Split instead
+  - Use tee -a for log files to append output and display to terminal
+  - Always check if tmux is available in PATH before running tests
+
+---
+
+## 2026-02-10 - US-004 - Stop tmux session and clean up
+- What was implemented:
+  - Enhanced KillSession() to gracefully terminate pane processes before killing session
+  - Added getPaneIDs() helper to get all pane IDs in the session
+  - Sends Ctrl+C to all panes first for graceful process termination
+  - Sends a second Ctrl+C after brief wait for stubborn processes
+  - Killing the session flushes and closes all log files automatically
+  - Maintains error handling for non-existent sessions
+
+- Files changed:
+  - internal/tmux/tmux.go - Enhanced KillSession() with graceful shutdown
+  - prd.json - Marked US-004 as passing
+  - progress.txt - Added this progress entry
+
+- **Learnings for future iterations:**
+  - Use `tmux send-keys -t target C-c` to gracefully interrupt running processes
+  - `tmux list-panes -t session -F "#{pane_id}"` gets all pane IDs for iteration
+  - Sending Ctrl+C twice helps terminate stubborn processes
+  - tmux pane IDs start with `%` (e.g., `%0`, `%1`)
+  - Killing a session automatically closes all panes and flushes their output
+
 ---

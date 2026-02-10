@@ -18,7 +18,7 @@ type Message struct {
 	Message   string      `json:"message"`
 	URL       string      `json:"url"`
 	Timestamp interface{} `json:"timestamp"`
-	Source    string       `json:"source,omitempty"`
+	Source    string      `json:"source,omitempty"`
 	Line      interface{} `json:"line,omitempty"`
 	Column    interface{} `json:"column,omitempty"`
 }

@@ -4,6 +4,11 @@
 
 # devlog
 
+[![CI](https://github.com/jellydn/devlog/actions/workflows/ci.yml/badge.svg)](https://github.com/jellydn/devlog/actions/workflows/ci.yml)
+[![Release](https://github.com/jellydn/devlog/actions/workflows/release.yml/badge.svg)](https://github.com/jellydn/devlog/actions/workflows/release.yml)
+[![codecov](https://codecov.io/gh/jellydn/devlog/branch/main/graph/badge.svg)](https://codecov.io/gh/jellydn/devlog)
+[![Go Report Card](https://goreportcard.com/badge/github.com/jellydn/devlog)](https://goreportcard.com/report/github.com/jellydn/devlog)
+
 Zero-code log capture for local development. Captures server logs via tmux and browser console logs via a native messaging host — all controlled by a single YAML config.
 
 ## Features

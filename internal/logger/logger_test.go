@@ -161,10 +161,10 @@ func TestLog_FormatsMessage(t *testing.T) {
 		Level:     "error",
 		Message:   "Something went wrong",
 		URL:       "http://example.com/page",
-		Timestamp: 1704067200000, // 2024-01-01 00:00:00.000
+		Timestamp: float64(1704067200000), // 2024-01-01 00:00:00.000
 		Source:    "app.js",
-		Line:      42,
-		Column:    10,
+		Line:      float64(42),
+		Column:    float64(10),
 	}
 
 	if err := logger.Log(msg); err != nil {
@@ -247,7 +247,7 @@ func TestLog_NoSourceInfo(t *testing.T) {
 		Level:     "log",
 		Message:   "Simple message",
 		URL:       "http://example.com",
-		Timestamp: 1234567890000,
+		Timestamp: float64(1234567890000),
 		// No Source, Line, or Column
 	}
 

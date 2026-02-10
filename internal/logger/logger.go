@@ -80,7 +80,7 @@ func (l *Logger) Log(msg *natmsg.Message) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	timestamp := time.UnixMilli(msg.Timestamp).Format("2006-01-02 15:04:05.000")
+	timestamp := formatTimestamp(msg.Timestamp)
 
 	// Build log line
 	var logLine strings.Builder
@@ -99,11 +99,9 @@ func (l *Logger) Log(msg *natmsg.Message) error {
 	if msg.Source != "" {
 		logLine.WriteString(" ")
 		logLine.WriteString(msg.Source)
-		if msg.Line > 0 {
-			logLine.WriteString(fmt.Sprintf(":%d", msg.Line))
-			if msg.Column > 0 {
-				logLine.WriteString(fmt.Sprintf(":%d", msg.Column))
-			}
+		loc := formatLoc(msg.Line, msg.Column)
+		if loc != "" {
+			logLine.WriteString(loc)
 		}
 	}
 
@@ -116,6 +114,52 @@ func (l *Logger) Log(msg *natmsg.Message) error {
 	}
 
 	return nil
+}
+
+func formatTimestamp(v interface{}) string {
+	switch t := v.(type) {
+	case string:
+		if parsed, err := time.Parse(time.RFC3339Nano, t); err == nil {
+			return parsed.Format("2006-01-02 15:04:05.000")
+		}
+		if parsed, err := time.Parse("2006-01-02T15:04:05.000Z", t); err == nil {
+			return parsed.Format("2006-01-02 15:04:05.000")
+		}
+		return t
+	case float64:
+		return time.UnixMilli(int64(t)).Format("2006-01-02 15:04:05.000")
+	case int64:
+		return time.UnixMilli(t).Format("2006-01-02 15:04:05.000")
+	default:
+		return time.Now().Format("2006-01-02 15:04:05.000")
+	}
+}
+
+func formatLoc(line, column interface{}) string {
+	l := toInt(line)
+	c := toInt(column)
+	if l > 0 {
+		if c > 0 {
+			return fmt.Sprintf(":%d:%d", l, c)
+		}
+		return fmt.Sprintf(":%d", l)
+	}
+	return ""
+}
+
+func toInt(v interface{}) int {
+	switch t := v.(type) {
+	case float64:
+		return int(t)
+	case int:
+		return t
+	case string:
+		var n int
+		fmt.Sscanf(t, "%d", &n)
+		return n
+	default:
+		return 0
+	}
 }
 
 // LogPath returns the path to the log file

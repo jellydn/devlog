@@ -26,15 +26,16 @@ func encodeMessage(t *testing.T, msg interface{}) []byte {
 func TestHost_ReadMessage_Success(t *testing.T) {
 	line := 42
 	col := 10
+	ts := mustParseTime(t, "2023-10-15T12:30:45Z")
 	inputMsg := Message{
-		Type:      "console",
-		Level:     "error",
-		Message:   "Test error message",
-		URL:       "http://example.com",
-		Timestamp: Timestamp{}, // Will be set via JSON
-		Source:    "app.js",
-		Line:      &line,
-		Column:    &col,
+		Type:    "console",
+		Level:   "error",
+		Message: "Test error message",
+		URL:     "http://example.com",
+		Timestamp: Timestamp{Time: ts},
+		Source:  "app.js",
+		Line:    &line,
+		Column:  &col,
 	}
 
 	data := encodeMessage(t, inputMsg)
@@ -209,9 +210,9 @@ func TestTimestamp_UnmarshalJSON_String_RFC3339Nano(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	expected := "2023-10-15T12:30:45.123456789Z"
-	if msg.Timestamp.Format("2006-01-02T15:04:05.999999999Z07:00") != expected {
-		t.Errorf("timestamp = %s, want %s", msg.Timestamp.Format("2006-01-02T15:04:05.999999999Z07:00"), expected)
+	expected := mustParseTime(t, "2023-10-15T12:30:45.123456789Z")
+	if !msg.Timestamp.Time.Equal(expected) {
+		t.Errorf("timestamp = %s, want %s", msg.Timestamp.Format(time.RFC3339Nano), expected.Format(time.RFC3339Nano))
 	}
 }
 
@@ -225,9 +226,9 @@ func TestTimestamp_UnmarshalJSON_String_RFC3339(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	expected := "2023-10-15T12:30:45Z"
-	if msg.Timestamp.Format("2006-01-02T15:04:05Z07:00") != expected {
-		t.Errorf("timestamp = %s, want %s", msg.Timestamp.Format("2006-01-02T15:04:05Z07:00"), expected)
+	expected := mustParseTime(t, "2023-10-15T12:30:45Z")
+	if !msg.Timestamp.Time.Equal(expected) {
+		t.Errorf("timestamp = %s, want %s", msg.Timestamp.Format(time.RFC3339), expected.Format(time.RFC3339))
 	}
 }
 
@@ -342,7 +343,7 @@ func TestMessage_LineColumn_Present(t *testing.T) {
 
 func mustParseTime(t *testing.T, s string) time.Time {
 	t.Helper()
-	ts, err := time.Parse("2006-01-02T15:04:05.999999999Z07:00", s)
+	ts, err := time.Parse(time.RFC3339Nano, s)
 	if err != nil {
 		t.Fatalf("failed to parse time: %v", err)
 	}

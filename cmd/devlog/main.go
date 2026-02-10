@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 
@@ -363,16 +364,12 @@ func openInFileManager(path string) error {
 		cmd = "open"
 		args = []string{path}
 	case "windows":
-		cmd = "explorer"
-		args = []string{path}
-	default: // linux and others
-		// Try xdg-open first
+		cmd = "cmd"
+		args = []string{"/c", "start", "", path}
+	default:
 		cmd = "xdg-open"
 		args = []string{path}
 	}
 
-	// For now, use a simpler approach - just print what we would do
-	// TODO: Implement actual file manager opening (US-009)
-	fmt.Printf("Would open with: %s %v\n", cmd, args)
-	return nil
+	return exec.Command(cmd, args...).Start()
 }

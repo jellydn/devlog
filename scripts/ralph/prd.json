@@ -126,7 +126,7 @@
         "Use correct command for current OS",
         "Create logs directory if it doesn't exist"
       ],
-      "passes": false,
+      "passes": true,
       "priority": 9
     }
   ]

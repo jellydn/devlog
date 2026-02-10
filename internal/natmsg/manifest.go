@@ -27,17 +27,40 @@ type FirefoxManifest struct {
 }
 
 func GetChromeNativeMessagingDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = "/"
+	}
 	switch runtime.GOOS {
 	case "darwin":
-		return filepath.Join(os.Getenv("HOME"), "Library", "Application Support", "Google", "Chrome", "NativeMessagingHosts")
+		return filepath.Join(home, "Library", "Application Support", "Google", "Chrome", "NativeMessagingHosts")
 	case "windows":
 		return filepath.Join(os.Getenv("APPDATA"), "Google", "Chrome", "NativeMessagingHosts")
 	default:
 		xdgConfig := os.Getenv("XDG_CONFIG_HOME")
 		if xdgConfig == "" {
-			xdgConfig = filepath.Join(os.Getenv("HOME"), ".config")
+			xdgConfig = filepath.Join(home, ".config")
 		}
 		return filepath.Join(xdgConfig, "google-chrome", "NativeMessagingHosts")
+	}
+}
+
+func GetBraveNativeMessagingDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = "/"
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		return filepath.Join(home, "Library", "Application Support", "BraveSoftware", "Brave-Browser", "NativeMessagingHosts")
+	case "windows":
+		return filepath.Join(os.Getenv("APPDATA"), "BraveSoftware", "Brave-Browser", "NativeMessagingHosts")
+	default:
+		xdgConfig := os.Getenv("XDG_CONFIG_HOME")
+		if xdgConfig == "" {
+			xdgConfig = filepath.Join(home, ".config")
+		}
+		return filepath.Join(xdgConfig, "BraveSoftware", "Brave-Browser", "NativeMessagingHosts")
 	}
 }
 
@@ -50,7 +73,10 @@ func GetFirefoxNativeMessagingDirs() []string {
 }
 
 func getFirefoxDirs() []string {
-	home := os.Getenv("HOME")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = "/"
+	}
 	switch runtime.GOOS {
 	case "darwin":
 		return []string{
@@ -102,6 +128,33 @@ func InstallChromeManifest(hostPath string, extensionID string) error {
 	return nil
 }
 
+func InstallBraveManifest(hostPath string, extensionID string) error {
+	dir := GetBraveNativeMessagingDir()
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create Brave native messaging directory: %w", err)
+	}
+
+	manifest := ChromeManifest{
+		Name:           "com.devlog.host",
+		Description:    "devlog Native Messaging Host for Browser Log Capture",
+		Path:           hostPath,
+		Type:           "stdio",
+		AllowedOrigins: []string{fmt.Sprintf("chrome-extension://%s/", extensionID)},
+	}
+
+	data, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal Brave manifest: %w", err)
+	}
+
+	manifestPath := filepath.Join(dir, "com.devlog.host.json")
+	if err := os.WriteFile(manifestPath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write Brave manifest: %w", err)
+	}
+
+	return nil
+}
+
 func InstallFirefoxManifest(hostPath string) error {
 	manifest := FirefoxManifest{
 		Name:              "com.devlog.host",
@@ -130,7 +183,7 @@ func InstallFirefoxManifest(hostPath string) error {
 }
 
 func UpdateManifestPath(newPath string) error {
-	dirs := append([]string{GetChromeNativeMessagingDir()}, getFirefoxDirs()...)
+	dirs := append([]string{GetChromeNativeMessagingDir(), GetBraveNativeMessagingDir()}, getFirefoxDirs()...)
 	manifestFile := "com.devlog.host.json"
 	updated := false
 	var updateErrors []string
@@ -181,7 +234,7 @@ func UpdateManifestPath(newPath string) error {
 }
 
 func IsManifestPathInUse(targetPath string) (bool, error) {
-	dirs := append([]string{GetChromeNativeMessagingDir()}, getFirefoxDirs()...)
+	dirs := append([]string{GetChromeNativeMessagingDir(), GetBraveNativeMessagingDir()}, getFirefoxDirs()...)
 	manifestFile := "com.devlog.host.json"
 	targetPath = filepath.Clean(targetPath)
 	foundManifest := false

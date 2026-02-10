@@ -496,6 +496,7 @@ func cmdRegister(cfg *config.Config, args []string) error {
 	}
 
 	installChrome := false
+	installBrave := false
 	installFirefox := false
 	extensionID := ""
 
@@ -504,6 +505,8 @@ func cmdRegister(cfg *config.Config, args []string) error {
 		switch arg {
 		case "--chrome":
 			installChrome = true
+		case "--brave":
+			installBrave = true
 		case "--firefox":
 			installFirefox = true
 		case "--extension-id":
@@ -520,14 +523,16 @@ Register native messaging host for browser logging.
 
 Options:
   --chrome         Register for Google Chrome
+  --brave          Register for Brave Browser
   --firefox        Register for Mozilla Firefox
-  --extension-id   Chrome extension ID (required for --chrome)
+  --extension-id   Chrome/Brave extension ID (required for --chrome or --brave)
   --help, -h       Show this help message
 
 Examples:
   devlog register --chrome --extension-id abcdefghijklmnopqrstuvwxyz123456
+  devlog register --brave --extension-id abcdefghijklmnopqrstuvwxyz123456
   devlog register --firefox
-  devlog register --chrome --firefox --extension-id abcdefghijklmnopqrstuvwxyz123456
+  devlog register --chrome --brave --extension-id abcdefghijklmnopqrstuvwxyz123456
 `)
 			return nil
 		default:
@@ -535,15 +540,15 @@ Examples:
 		}
 	}
 
-	if !installChrome && !installFirefox {
+	if !installChrome && !installBrave && !installFirefox {
 		if extensionID != "" {
 			installChrome = true
 		}
 		installFirefox = true
 	}
 
-	if installChrome && extensionID == "" {
-		return fmt.Errorf("--extension-id is required when registering for Chrome")
+	if (installChrome || installBrave) && extensionID == "" {
+		return fmt.Errorf("--extension-id is required when registering for Chrome or Brave")
 	}
 
 	fmt.Printf("devlog-host binary: %s\n", hostPath)
@@ -554,6 +559,15 @@ Examples:
 			return fmt.Errorf("failed to register Chrome manifest: %w", err)
 		}
 		dir := natmsg.GetChromeNativeMessagingDir()
+		fmt.Printf("  Installed to: %s\n", dir)
+	}
+
+	if installBrave {
+		fmt.Printf("Registering for Brave...\n")
+		if err := natmsg.InstallBraveManifest(hostPath, extensionID); err != nil {
+			return fmt.Errorf("failed to register Brave manifest: %w", err)
+		}
+		dir := natmsg.GetBraveNativeMessagingDir()
 		fmt.Printf("  Installed to: %s\n", dir)
 	}
 
@@ -691,6 +705,8 @@ func openInFileManager(path string) error {
 }
 
 func cmdHealthcheck(cfg *config.Config, args []string) error {
+	const maxLabelLen = 22
+
 	fmt.Println("devlog healthcheck")
 	fmt.Println("==================")
 	fmt.Println()
@@ -698,7 +714,7 @@ func cmdHealthcheck(cfg *config.Config, args []string) error {
 	allGood := true
 
 	// Check tmux
-	fmt.Print("tmux:                    ")
+	fmt.Printf("%-*s ", maxLabelLen, "tmux:")
 	version, err := tmux.CheckVersion()
 	if err != nil {
 		fmt.Println("✗ NOT FOUND")
@@ -710,7 +726,7 @@ func cmdHealthcheck(cfg *config.Config, args []string) error {
 	}
 
 	// Check devlog-host binary
-	fmt.Print("devlog-host binary:      ")
+	fmt.Printf("%-*s ", maxLabelLen, "devlog-host binary:")
 	hostPath, err := natmsg.FindDevlogHostBinary()
 	if err != nil {
 		fmt.Println("✗ NOT FOUND")
@@ -722,8 +738,9 @@ func cmdHealthcheck(cfg *config.Config, args []string) error {
 	}
 
 	// Check native messaging manifests
-	fmt.Print("Browser extension:       ")
+	fmt.Printf("%-*s ", maxLabelLen, "Browser extension:")
 	chromeManifestPath := filepath.Join(natmsg.GetChromeNativeMessagingDir(), "com.devlog.host.json")
+	braveManifestPath := filepath.Join(natmsg.GetBraveNativeMessagingDir(), "com.devlog.host.json")
 	firefoxManifestPaths := []string{}
 	for _, dir := range natmsg.GetFirefoxNativeMessagingDirs() {
 		firefoxManifestPaths = append(firefoxManifestPaths, filepath.Join(dir, "com.devlog.host.json"))
@@ -734,6 +751,11 @@ func cmdHealthcheck(cfg *config.Config, args []string) error {
 		chromeRegistered = true
 	}
 
+	braveRegistered := false
+	if _, err := os.Stat(braveManifestPath); err == nil {
+		braveRegistered = true
+	}
+
 	firefoxRegistered := false
 	for _, path := range firefoxManifestPaths {
 		if _, err := os.Stat(path); err == nil {
@@ -742,10 +764,13 @@ func cmdHealthcheck(cfg *config.Config, args []string) error {
 		}
 	}
 
-	if chromeRegistered || firefoxRegistered {
+	if chromeRegistered || braveRegistered || firefoxRegistered {
 		registered := []string{}
 		if chromeRegistered {
 			registered = append(registered, "Chrome")
+		}
+		if braveRegistered {
+			registered = append(registered, "Brave")
 		}
 		if firefoxRegistered {
 			registered = append(registered, "Firefox")
@@ -755,6 +780,7 @@ func cmdHealthcheck(cfg *config.Config, args []string) error {
 		fmt.Println("✗ NOT REGISTERED")
 		fmt.Println("  Browser extension is not registered.")
 		fmt.Println("  Register: devlog register --chrome --extension-id <id>")
+		fmt.Println("            devlog register --brave --extension-id <id>")
 		fmt.Println("            devlog register --firefox")
 		allGood = false
 	}

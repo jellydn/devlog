@@ -2,9 +2,11 @@
 package logger
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -128,10 +130,38 @@ func formatTimestamp(v interface{}) string {
 		return t
 	case float64:
 		return time.UnixMilli(int64(t)).Format("2006-01-02 15:04:05.000")
+	case float32:
+		return time.UnixMilli(int64(t)).Format("2006-01-02 15:04:05.000")
+	case int:
+		return time.UnixMilli(int64(t)).Format("2006-01-02 15:04:05.000")
+	case int8:
+		return time.UnixMilli(int64(t)).Format("2006-01-02 15:04:05.000")
+	case int16:
+		return time.UnixMilli(int64(t)).Format("2006-01-02 15:04:05.000")
+	case int32:
+		return time.UnixMilli(int64(t)).Format("2006-01-02 15:04:05.000")
 	case int64:
 		return time.UnixMilli(t).Format("2006-01-02 15:04:05.000")
+	case uint:
+		return time.UnixMilli(int64(t)).Format("2006-01-02 15:04:05.000")
+	case uint8:
+		return time.UnixMilli(int64(t)).Format("2006-01-02 15:04:05.000")
+	case uint16:
+		return time.UnixMilli(int64(t)).Format("2006-01-02 15:04:05.000")
+	case uint32:
+		return time.UnixMilli(int64(t)).Format("2006-01-02 15:04:05.000")
+	case uint64:
+		return time.UnixMilli(int64(t)).Format("2006-01-02 15:04:05.000")
+	case json.Number:
+		if n, err := t.Int64(); err == nil {
+			return time.UnixMilli(n).Format("2006-01-02 15:04:05.000")
+		}
+		if n, err := t.Float64(); err == nil {
+			return time.UnixMilli(int64(n)).Format("2006-01-02 15:04:05.000")
+		}
+		return t.String()
 	default:
-		return time.Now().Format("2006-01-02 15:04:05.000")
+		return fmt.Sprintf("[unparsable timestamp: %v]", v)
 	}
 }
 
@@ -151,11 +181,39 @@ func toInt(v interface{}) int {
 	switch t := v.(type) {
 	case float64:
 		return int(t)
+	case float32:
+		return int(t)
 	case int:
 		return t
+	case int8:
+		return int(t)
+	case int16:
+		return int(t)
+	case int32:
+		return int(t)
+	case int64:
+		return int(t)
+	case uint:
+		return int(t)
+	case uint8:
+		return int(t)
+	case uint16:
+		return int(t)
+	case uint32:
+		return int(t)
+	case uint64:
+		return int(t)
+	case json.Number:
+		n, err := t.Int64()
+		if err != nil {
+			return 0
+		}
+		return int(n)
 	case string:
-		var n int
-		fmt.Sscanf(t, "%d", &n)
+		n, err := strconv.Atoi(strings.TrimSpace(t))
+		if err != nil {
+			return 0
+		}
 		return n
 	default:
 		return 0

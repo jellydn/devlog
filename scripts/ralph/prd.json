@@ -1,0 +1,162 @@
+{
+  "project": "devlog",
+  "branchName": "ralph/devlog-mvp",
+  "description": "Zero-code native log capture — tmux server logs + browser console logs via native messaging host, controlled by YAML config",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "YAML configuration parsing with env var interpolation",
+      "description": "As a developer, I want to define my dev environment in a devlog.yml file so that devlog knows what commands to run, where to write logs, and how to capture browser output.",
+      "acceptanceCriteria": [
+        "Parses devlog.yml with fields: version, project, logs_dir, run_mode, tmux, browser",
+        "Validates required fields and reports clear errors for missing/invalid config",
+        "Supports run_mode: timestamped (creates logs/<timestamp>/) and run_mode: overwrite (writes to logs/ directly)",
+        "Defaults: logs_dir = ./logs, run_mode = timestamped",
+        "Supports environment variable interpolation (e.g., $PORT or ${PORT}) in string values",
+        "Typecheck passes (go build)"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Implemented config parsing with env var interpolation, validation, and tests"
+    },
+    {
+      "id": "US-002",
+      "title": "tmux session creation from YAML",
+      "description": "As a developer, I want devlog up to create a tmux session with windows and panes from my YAML config so that my dev servers start automatically.",
+      "acceptanceCriteria": [
+        "Creates a tmux session with the name from tmux.session",
+        "Creates windows and panes as defined in tmux.windows[].panes[]",
+        "Each pane runs its configured cmd",
+        "If session already exists, devlog up exits with a clear error message",
+        "Typecheck passes (go build)"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Server log capture via tmux pipe-pane",
+      "description": "As a developer, I want stdout/stderr from each tmux pane captured to its configured log file so I can review server output later.",
+      "acceptanceCriteria": [
+        "Each pane's stdout/stderr is written to the file specified in panes[].log",
+        "Log files are created under the resolved logs_dir (respecting run_mode)",
+        "Parent directories are created automatically",
+        "Logs are flushed in near real-time (within 100ms)",
+        "Typecheck passes (go build)"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Clean shutdown with devlog down",
+      "description": "As a developer, I want devlog down to cleanly stop the tmux session so I don't leave orphan processes or half-written logs.",
+      "acceptanceCriteria": [
+        "Kills the tmux session by name",
+        "Flushes and closes all log files",
+        "Exits cleanly with status 0",
+        "If no session is running, exits with a clear error message",
+        "Native host exits naturally when extension disconnects (no explicit signal needed)",
+        "Typecheck passes (go build)"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "CLI status command",
+      "description": "As a developer, I want devlog status to show me what's running and where logs are so I can quickly check the state.",
+      "acceptanceCriteria": [
+        "Prints: session name, running/stopped, log directory path, list of panes and their log files",
+        "Shows native host registration state (registered/not registered)",
+        "Works whether or not a session is active (shows 'not running' if inactive)",
+        "Typecheck passes (go build)"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "CLI open command",
+      "description": "As a developer, I want devlog open to open my log directory in the OS file manager so I can quickly browse log files.",
+      "acceptanceCriteria": [
+        "Opens the current run's log directory using OS-appropriate command (open on macOS, xdg-open on Linux)",
+        "If no logs directory exists, prints a clear error",
+        "Typecheck passes (go build)"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Browser extension — console capture (Chrome)",
+      "description": "As a developer, I want a Chrome browser extension that captures console output and errors from the active tab and sends them to the native host.",
+      "acceptanceCriteria": [
+        "Manifest V3 extension for Chrome",
+        "Captures console.log, console.info, console.warn, console.error via content script or DevTools API",
+        "Captures uncaught exceptions (window.onerror)",
+        "Captures unhandled promise rejections (unhandledrejection)",
+        "Only captures from URLs matching patterns in browser.urls config",
+        "Filters by configured browser.levels",
+        "Sends JSON log events to native messaging host: { level, message, timestamp, url }",
+        "Single active tab at a time (MVP)"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Browser extension — Firefox support",
+      "description": "As a developer, I want the browser extension to also work on Firefox so I'm not locked to Chrome.",
+      "acceptanceCriteria": [
+        "Extension manifest compatible with Firefox (browser_specific_settings with gecko id)",
+        "Native messaging works on Firefox",
+        "Same capture behavior as Chrome version",
+        "Tested on Firefox"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": "May share most code with Chrome extension, just needs manifest adjustments"
+    },
+    {
+      "id": "US-009",
+      "title": "Native messaging host binary",
+      "description": "As a developer, I want a native messaging host that receives log events from the browser extension and writes them to disk.",
+      "acceptanceCriteria": [
+        "Go binary that communicates via stdin/stdout using Chrome Native Messaging protocol (4-byte little-endian length-prefixed JSON)",
+        "Receives JSON log events with fields: level, message, timestamp, url",
+        "Appends formatted lines to the file specified in browser.file under resolved logs_dir",
+        "Format: [timestamp][LEVEL] message",
+        "Append-only writes, never truncates mid-run",
+        "No network access — file I/O only",
+        "Exits naturally when stdin closes (extension disconnects)",
+        "Typecheck passes (go build)"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Native host manifest registration",
+      "description": "As a developer, I want devlog up to register the native messaging host manifest so the browser extension can find and communicate with it.",
+      "acceptanceCriteria": [
+        "Generates native messaging host manifest JSON for Chrome and Firefox",
+        "Places manifest in the correct OS-specific directory (macOS: ~/Library/Application Support/..., Linux: ~/.config/...)",
+        "Manifest contains correct allowed_origins (Chrome) and allowed_extensions (Firefox)",
+        "Manifest points to the devlog binary path",
+        "devlog status shows native host registration state",
+        "Typecheck passes (go build)"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

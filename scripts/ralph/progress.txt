@@ -1,0 +1,23 @@
+## Codebase Patterns
+- Use `go test ./...` to run all tests
+- Config package is in `internal/config/` following Go standard layout
+- YAML parsing uses `gopkg.in/yaml.v3`
+
+# Ralph Progress Log
+Started: Tue Feb 10 19:08:13 +08 2026
+---
+
+## Tue Feb 10 19:30:00 +08 2026 - US-001
+- Implemented YAML configuration parsing with env var interpolation
+- Files changed:
+  - `go.mod` - Initialized Go module
+  - `internal/config/config.go` - Config struct and parsing logic
+  - `internal/config/config_test.go` - Comprehensive tests
+  - `cmd/devlog/main.go` - Entry point for CLI
+  - `devlog.yml.example` - Example configuration file
+- **Learnings for future iterations:**
+  - Environment variable interpolation supports both `$VAR` and `${VAR}` syntax
+  - Config validation returns clear error messages for missing fields
+  - `ResolveLogsDir()` handles both timestamped and overwrite run modes
+  - The config structure: version, project, logs_dir, run_mode, tmux (session/windows/panes), browser (urls/file/levels)
+---

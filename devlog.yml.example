@@ -1,0 +1,25 @@
+version: "1.0"
+project: devlog-example
+logs_dir: ./logs
+run_mode: timestamped
+tmux:
+  session: devlog-demo
+  windows:
+    - name: backend
+      panes:
+        - cmd: echo "Starting backend server on port $PORT"
+          log: backend.log
+        - cmd: echo "Starting worker"
+          log: worker.log
+    - name: frontend
+      panes:
+        - cmd: echo "Starting frontend dev server"
+          log: frontend.log
+browser:
+  urls:
+    - "http://localhost:3000/*"
+  file: browser.log
+  levels:
+    - error
+    - warn
+    - info

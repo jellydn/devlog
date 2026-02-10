@@ -71,14 +71,14 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install tmux
 
-      - run: gofmt -l . | (! grep .)
-        name: Check formatting
+      - name: Check formatting
+        run: gofmt -l . | (! grep .)
 
-      - run: go vet ./...
-        name: Vet
+      - name: Vet
+        run: go vet ./...
 
-      - run: go test ./...
-        name: Test
+      - name: Test
+        run: go test ./...
 
       - name: Integration Tests
         if: runner.os != 'Windows'

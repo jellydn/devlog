@@ -164,6 +164,27 @@ Timestamped and level-tagged:
 - **Browser Extension**: Manifest V3 (Chrome) + Firefox. Captures console output from matching URLs.
 - **Native Host**: Go binary invoked by the extension via Native Messaging protocol. Writes log events to disk.
 
+### Browser Extension Structure
+
+The browser extension uses a shared codebase for both Chrome and Firefox:
+
+```
+browser-extension/
+├── page_inject.js       # Shared: Console capture logic (injected into pages)
+├── content_script.js    # Shared: Bridges page and background script
+├── background.js        # Shared: Native messaging communication
+├── popup.js/popup.html  # Shared: Extension popup UI
+├── icons/               # Shared: Extension icons
+├── chrome/
+│   ├── manifest.json    # Chrome-specific manifest (v3)
+│   └── (symlinks to shared files)
+└── firefox/
+    ├── manifest.json    # Firefox-specific manifest (v2)
+    └── (symlinks to shared files)
+```
+
+Both Chrome and Firefox variants use symbolic links to the shared implementation files, reducing code duplication and ensuring consistent behavior across browsers. Only the `manifest.json` files differ to accommodate browser-specific requirements.
+
 ## Requirements
 
 - Go 1.25+

@@ -27,7 +27,12 @@ jobs:
 
       - name: Check formatting
         shell: bash
-        run: gofmt -l . | (! grep .)
+        run: |
+          if [ -n "$(gofmt -l .)" ]; then
+            echo "Code is not formatted. Please run 'go fmt ./...'"
+            gofmt -l .
+            exit 1
+          fi
 
       - name: Run vet
         run: go vet ./...
@@ -74,7 +79,12 @@ jobs:
 
       - name: Check formatting
         shell: bash
-        run: gofmt -l . | (! grep .)
+        run: |
+          if [ -n "$(gofmt -l .)" ]; then
+            echo "Code is not formatted. Please run 'go fmt ./...'"
+            gofmt -l .
+            exit 1
+          fi
 
       - name: Vet
         run: go vet ./...

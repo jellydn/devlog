@@ -71,7 +71,7 @@
         "Show individual log file paths",
         "Show browser logging status"
       ],
-      "passes": false,
+      "passes": true,
       "priority": 5
     },
     {

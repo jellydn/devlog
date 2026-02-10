@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.svg" alt="devlog logo" width="120" height="120">
+</p>
+
 # devlog
 
 Zero-code log capture for local development. Captures server logs via tmux and browser console logs via a native messaging host — all controlled by a single YAML config.

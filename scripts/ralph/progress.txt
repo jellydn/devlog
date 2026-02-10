@@ -80,3 +80,27 @@
   - Killing a session automatically closes all panes and flushes their output
 
 ---
+
+## 2026-02-10 - US-005 - Show session status
+- What was implemented:
+  - Enhanced cmdStatus to show detailed pane information (pane ID, current command)
+  - Added browser logging status showing URLs monitored, log file path, and filter levels
+  - Enhanced GetSessionInfo() to retrieve pane details for each window
+  - Added getWindowPanes() helper to get pane ID, index, and current command
+  - Added log file existence status (exists/missing) for both tmux and browser logs
+  - Shows "disabled" message when no browser URLs are configured
+
+- Files changed:
+  - internal/tmux/tmux.go - Added PaneInfo type, enhanced GetSessionInfo(), added getWindowPanes()
+  - cmd/devlog/main.go - Enhanced cmdStatus with pane details and browser logging status
+  - scripts/ralph/prd.json - Marked US-005 as passing
+  - scripts/ralph/progress.txt - Added this progress entry
+
+- **Learnings for future iterations:**
+  - tmux list-panes -F "#{pane_id}|#{pane_index}|#{pane_current_command}" gets pane details
+  - Use filepath.Join() to construct log file paths for cross-platform compatibility
+  - os.Stat() can check if log files exist to show "exists"/"missing" status
+  - Window panes are stored in WindowInfo.Panes for easy iteration in status display
+  - Browser config has URLs, File, and Levels fields for complete status reporting
+
+---

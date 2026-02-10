@@ -85,7 +85,7 @@
         "Handle log levels filtering",
         "Run as separate binary (devlog-host)"
       ],
-      "passes": false,
+      "passes": true,
       "priority": 6
     },
     {

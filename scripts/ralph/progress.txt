@@ -6,6 +6,8 @@
 - Use `internal/` packages for private implementation (e.g., internal/tmux, internal/config)
 - Runner pattern for external tool wrappers: create a Runner struct with methods for operations
 - Always skip tests if external dependencies (like tmux) are not available in PATH
+- Native messaging protocol: 4-byte length prefix (native endian) + JSON body
+- Use `binary.NativeEndian` for native byte order in native messaging protocol
 
 ## 2026-02-10 - US-002 - CLI scaffold with up/down/status/open commands
 - What was implemented:
@@ -102,5 +104,35 @@
   - os.Stat() can check if log files exist to show "exists"/"missing" status
   - Window panes are stored in WindowInfo.Panes for easy iteration in status display
   - Browser config has URLs, File, and Levels fields for complete status reporting
+
+---
+
+## 2026-02-10 - US-006 - Native messaging host for browser logs
+- What was implemented:
+  - Created internal/natmsg package for Native Messaging protocol handling
+  - Created internal/logger package for browser log file writing with level filtering
+  - Created cmd/devlog-host/main.go binary that runs as separate process
+  - Protocol: reads 4-byte length prefix (native endian) + JSON from stdin
+  - Messages formatted as: [TIMESTAMP] [LEVEL] [URL] source:line:column: message
+  - Supports log level filtering (case-insensitive)
+  - Sends acknowledgment responses back to browser
+  - Comprehensive tests for both natmsg and logger packages
+
+- Files changed:
+  - internal/natmsg/natmsg.go - Native messaging protocol implementation
+  - internal/natmsg/natmsg_test.go - Protocol tests
+  - internal/logger/logger.go - Log file writing with filtering
+  - internal/logger/logger_test.go - Logger tests
+  - cmd/devlog-host/main.go - Native host binary entry point
+  - scripts/ralph/prd.json - Marked US-006 as passing
+  - scripts/ralph/progress.txt - Added this progress entry
+
+- **Learnings for future iterations:**
+  - Native Messaging protocol uses binary.NativeEndian for the 4-byte length prefix
+  - Messages over 10MB are rejected as a sanity check
+  - Log levels are case-insensitive for better UX
+  - The host exits cleanly on EOF (browser closing connection)
+  - io.ReadFull is needed to ensure complete reads of the length prefix and body
+  - Use sync.Mutex in logger to handle concurrent writes from multiple browser tabs
 
 ---

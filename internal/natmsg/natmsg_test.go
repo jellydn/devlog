@@ -28,14 +28,14 @@ func TestHost_ReadMessage_Success(t *testing.T) {
 	col := 10
 	ts := mustParseTime(t, "2023-10-15T12:30:45Z")
 	inputMsg := Message{
-		Type:    "console",
-		Level:   "error",
-		Message: "Test error message",
-		URL:     "http://example.com",
+		Type:      "console",
+		Level:     "error",
+		Message:   "Test error message",
+		URL:       "http://example.com",
 		Timestamp: Timestamp{Time: ts},
-		Source:  "app.js",
-		Line:    &line,
-		Column:  &col,
+		Source:    "app.js",
+		Line:      &line,
+		Column:    &col,
 	}
 
 	data := encodeMessage(t, inputMsg)

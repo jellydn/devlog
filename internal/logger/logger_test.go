@@ -1,7 +1,6 @@
 package logger
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -59,11 +58,12 @@ func TestNew_AppendsToExistingFile(t *testing.T) {
 
 	// Write a message
 	msg := &natmsg.Message{
-		Type:      "console",
-		Level:     "log",
-		Message:   "test message",
-		Timestamp: 1234567890000,
+		Type:    "console",
+		Level:   "log",
+		Message: "test message",
 	}
+	msg.Timestamp.Time = time.UnixMilli(1234567890000)
+
 	if err := logger.Log(msg); err != nil {
 		t.Fatalf("failed to log message: %v", err)
 	}
@@ -158,16 +158,18 @@ func TestLog_FormatsMessage(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
+	line := 42
+	col := 10
 	msg := &natmsg.Message{
-		Type:      "console",
-		Level:     "error",
-		Message:   "Something went wrong",
-		URL:       "http://example.com/page",
-		Timestamp: float64(1704067200000), // 2024-01-01 00:00:00.000
-		Source:    "app.js",
-		Line:      float64(42),
-		Column:    float64(10),
+		Type:    "console",
+		Level:   "error",
+		Message: "Something went wrong",
+		URL:     "http://example.com/page",
+		Source:  "app.js",
+		Line:    &line,
+		Column:  &col,
 	}
+	msg.Timestamp.Time = time.UnixMilli(1704067200000) // 2024-01-01 00:00:00.000
 
 	if err := logger.Log(msg); err != nil {
 		t.Fatalf("failed to log message: %v", err)
@@ -206,9 +208,12 @@ func TestLog_SkipsFilteredLevels(t *testing.T) {
 
 	// Log messages at different levels
 	messages := []*natmsg.Message{
-		{Type: "console", Level: "log", Message: "info message", Timestamp: 1234567890000},
-		{Type: "console", Level: "error", Message: "error message", Timestamp: 1234567890000},
-		{Type: "console", Level: "warn", Message: "warn message", Timestamp: 1234567890000},
+		{Type: "console", Level: "log", Message: "info message"},
+		{Type: "console", Level: "error", Message: "error message"},
+		{Type: "console", Level: "warn", Message: "warn message"},
+	}
+	for i := range messages {
+		messages[i].Timestamp.Time = time.UnixMilli(1234567890000)
 	}
 
 	for _, msg := range messages {
@@ -245,13 +250,13 @@ func TestLog_NoSourceInfo(t *testing.T) {
 	}
 
 	msg := &natmsg.Message{
-		Type:      "console",
-		Level:     "log",
-		Message:   "Simple message",
-		URL:       "http://example.com",
-		Timestamp: float64(1234567890000),
+		Type:    "console",
+		Level:   "log",
+		Message: "Simple message",
+		URL:     "http://example.com",
 		// No Source, Line, or Column
 	}
+	msg.Timestamp.Time = time.UnixMilli(1234567890000)
 
 	if err := logger.Log(msg); err != nil {
 		t.Fatalf("failed to log message: %v", err)
@@ -279,12 +284,12 @@ func TestLog_NoURL(t *testing.T) {
 	}
 
 	msg := &natmsg.Message{
-		Type:      "console",
-		Level:     "log",
-		Message:   "Message without URL",
-		Timestamp: 1234567890000,
+		Type:    "console",
+		Level:   "log",
+		Message: "Message without URL",
 		// No URL
 	}
+	msg.Timestamp.Time = time.UnixMilli(1234567890000)
 
 	if err := logger.Log(msg); err != nil {
 		t.Fatalf("failed to log message: %v", err)
@@ -314,34 +319,5 @@ func TestLogPath(t *testing.T) {
 
 	if logger.LogPath() != logPath {
 		t.Errorf("LogPath() = %q, want %q", logger.LogPath(), logPath)
-	}
-}
-
-func TestFormatTimestamp_Int(t *testing.T) {
-	got := formatTimestamp(1704067200000)
-	want := time.UnixMilli(1704067200000).Format("2006-01-02 15:04:05.000")
-	if got != want {
-		t.Fatalf("formatTimestamp(int) = %q, want %q", got, want)
-	}
-}
-
-func TestFormatTimestamp_JSONNumber(t *testing.T) {
-	got := formatTimestamp(json.Number("1704067200000"))
-	want := time.UnixMilli(1704067200000).Format("2006-01-02 15:04:05.000")
-	if got != want {
-		t.Fatalf("formatTimestamp(json.Number) = %q, want %q", got, want)
-	}
-}
-
-func TestFormatTimestamp_UnparsableType(t *testing.T) {
-	got := formatTimestamp(struct{ A int }{A: 1})
-	if !strings.HasPrefix(got, "[unparsable timestamp:") {
-		t.Fatalf("formatTimestamp(unparsable) = %q, want placeholder", got)
-	}
-}
-
-func TestToInt_StringStrict(t *testing.T) {
-	if got := toInt("123xyz"); got != 0 {
-		t.Fatalf("toInt(\"123xyz\") = %d, want 0", got)
 	}
 }

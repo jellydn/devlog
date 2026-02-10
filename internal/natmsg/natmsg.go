@@ -9,18 +9,60 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 )
+
+// Timestamp represents a flexible timestamp that can be unmarshaled from
+// various JSON formats (string, number) and provides a time.Time value.
+type Timestamp struct {
+	time.Time
+}
+
+// UnmarshalJSON implements custom JSON unmarshaling for Timestamp.
+// Accepts both string (RFC3339) and numeric (Unix milliseconds) formats.
+func (t *Timestamp) UnmarshalJSON(b []byte) error {
+	// Try parsing as string first (RFC3339Nano format)
+	var s string
+	if err := json.Unmarshal(b, &s); err == nil {
+		parsed, err := time.Parse(time.RFC3339Nano, s)
+		if err == nil {
+			t.Time = parsed
+			return nil
+		}
+		// Try alternative format without nano precision
+		parsed, err = time.Parse(time.RFC3339, s)
+		if err == nil {
+			t.Time = parsed
+			return nil
+		}
+		return fmt.Errorf("invalid timestamp string format: %s", s)
+	}
+
+	// Try parsing as number (Unix milliseconds)
+	var n float64
+	if err := json.Unmarshal(b, &n); err == nil {
+		t.Time = time.UnixMilli(int64(n))
+		return nil
+	}
+
+	return fmt.Errorf("timestamp must be a string or number")
+}
+
+// MarshalJSON implements custom JSON marshaling for Timestamp.
+func (t Timestamp) MarshalJSON() ([]byte, error) {
+	return json.Marshal(t.Time.Format(time.RFC3339Nano))
+}
 
 // Message represents a log message from the browser extension
 type Message struct {
-	Type      string      `json:"type"`
-	Level     string      `json:"level"`
-	Message   string      `json:"message"`
-	URL       string      `json:"url"`
-	Timestamp interface{} `json:"timestamp"`
-	Source    string      `json:"source,omitempty"`
-	Line      interface{} `json:"line,omitempty"`
-	Column    interface{} `json:"column,omitempty"`
+	Type      string    `json:"type"`
+	Level     string    `json:"level"`
+	Message   string    `json:"message"`
+	URL       string    `json:"url"`
+	Timestamp Timestamp `json:"timestamp"`
+	Source    string    `json:"source,omitempty"`
+	Line      *int      `json:"line,omitempty"`
+	Column    *int      `json:"column,omitempty"`
 }
 
 // Response represents a response message sent back to the browser

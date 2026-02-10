@@ -317,3 +317,13 @@ type PaneConfig struct {
 	Cmd string
 	Log string
 }
+
+// CheckVersion returns the tmux version string or an error if tmux is not installed
+func CheckVersion() (string, error) {
+	cmd := exec.Command("tmux", "-V")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("tmux not found")
+	}
+	return strings.TrimSpace(string(output)), nil
+}

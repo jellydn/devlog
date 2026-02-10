@@ -16,18 +16,20 @@ import (
 const usage = `Usage: devlog <command> [args...]
 
 Commands:
-  init     Create a devlog.yml template in current directory
-  up       Start tmux session and browser logging
-  down     Stop tmux session and flush logs
-  attach   Attach to the running tmux session
-  status   Show session state and log paths
-  ls       List log runs
-  open     Open logs directory in file manager
-  register Register native messaging host for browser logging
-  help     Show this help message
+  init        Create a devlog.yml template in current directory
+  up          Start tmux session and browser logging
+  down        Stop tmux session and flush logs
+  attach      Attach to the running tmux session
+  status      Show session state and log paths
+  ls          List log runs
+  open        Open logs directory in file manager
+  register    Register native messaging host for browser logging
+  healthcheck Check system requirements (tmux, browser extension)
+  help        Show this help message
 
 Examples:
   devlog init
+  devlog healthcheck
   devlog up
   devlog attach
   devlog status
@@ -39,15 +41,16 @@ Examples:
 type Command func(cfg *config.Config, args []string) error
 
 var commands = map[string]Command{
-	"init":     cmdInit,
-	"up":       cmdUp,
-	"down":     cmdDown,
-	"attach":   cmdAttach,
-	"status":   cmdStatus,
-	"ls":       cmdLs,
-	"open":     cmdOpen,
-	"help":     cmdHelp,
-	"register": cmdRegister,
+	"init":        cmdInit,
+	"up":          cmdUp,
+	"down":        cmdDown,
+	"attach":      cmdAttach,
+	"status":      cmdStatus,
+	"ls":          cmdLs,
+	"open":        cmdOpen,
+	"help":        cmdHelp,
+	"register":    cmdRegister,
+	"healthcheck": cmdHealthcheck,
 }
 
 func main() {
@@ -65,7 +68,7 @@ func main() {
 	}
 
 	// Commands that don't need config
-	if command == "init" || command == "register" {
+	if command == "init" || command == "register" || command == "healthcheck" {
 		runCommandWithoutConfig(command)
 		return
 	}
@@ -493,6 +496,7 @@ func cmdRegister(cfg *config.Config, args []string) error {
 	}
 
 	installChrome := false
+	installBrave := false
 	installFirefox := false
 	extensionID := ""
 
@@ -501,6 +505,8 @@ func cmdRegister(cfg *config.Config, args []string) error {
 		switch arg {
 		case "--chrome":
 			installChrome = true
+		case "--brave":
+			installBrave = true
 		case "--firefox":
 			installFirefox = true
 		case "--extension-id":
@@ -517,14 +523,16 @@ Register native messaging host for browser logging.
 
 Options:
   --chrome         Register for Google Chrome
+  --brave          Register for Brave Browser
   --firefox        Register for Mozilla Firefox
-  --extension-id   Chrome extension ID (required for --chrome)
+  --extension-id   Chrome/Brave extension ID (required for --chrome or --brave)
   --help, -h       Show this help message
 
 Examples:
   devlog register --chrome --extension-id abcdefghijklmnopqrstuvwxyz123456
+  devlog register --brave --extension-id abcdefghijklmnopqrstuvwxyz123456
   devlog register --firefox
-  devlog register --chrome --firefox --extension-id abcdefghijklmnopqrstuvwxyz123456
+  devlog register --chrome --brave --extension-id abcdefghijklmnopqrstuvwxyz123456
 `)
 			return nil
 		default:
@@ -532,15 +540,15 @@ Examples:
 		}
 	}
 
-	if !installChrome && !installFirefox {
+	if !installChrome && !installBrave && !installFirefox {
 		if extensionID != "" {
 			installChrome = true
 		}
 		installFirefox = true
 	}
 
-	if installChrome && extensionID == "" {
-		return fmt.Errorf("--extension-id is required when registering for Chrome")
+	if (installChrome || installBrave) && extensionID == "" {
+		return fmt.Errorf("--extension-id is required when registering for Chrome or Brave")
 	}
 
 	fmt.Printf("devlog-host binary: %s\n", hostPath)
@@ -551,6 +559,15 @@ Examples:
 			return fmt.Errorf("failed to register Chrome manifest: %w", err)
 		}
 		dir := natmsg.GetChromeNativeMessagingDir()
+		fmt.Printf("  Installed to: %s\n", dir)
+	}
+
+	if installBrave {
+		fmt.Printf("Registering for Brave...\n")
+		if err := natmsg.InstallBraveManifest(hostPath, extensionID); err != nil {
+			return fmt.Errorf("failed to register Brave manifest: %w", err)
+		}
+		dir := natmsg.GetBraveNativeMessagingDir()
 		fmt.Printf("  Installed to: %s\n", dir)
 	}
 
@@ -685,4 +702,95 @@ func openInFileManager(path string) error {
 	}
 
 	return exec.Command(cmd, args...).Start()
+}
+
+func cmdHealthcheck(cfg *config.Config, args []string) error {
+	const maxLabelLen = 22
+
+	fmt.Println("devlog healthcheck")
+	fmt.Println("==================")
+	fmt.Println()
+
+	allGood := true
+
+	// Check tmux
+	fmt.Printf("%-*s ", maxLabelLen, "tmux:")
+	version, err := tmux.CheckVersion()
+	if err != nil {
+		fmt.Println("✗ NOT FOUND")
+		fmt.Println("  tmux is required to run devlog.")
+		fmt.Println("  Install: https://github.com/tmux/tmux/wiki/Installing")
+		allGood = false
+	} else {
+		fmt.Printf("✓ %s\n", version)
+	}
+
+	// Check devlog-host binary
+	fmt.Printf("%-*s ", maxLabelLen, "devlog-host binary:")
+	hostPath, err := natmsg.FindDevlogHostBinary()
+	if err != nil {
+		fmt.Println("✗ NOT FOUND")
+		fmt.Println("  devlog-host is required for browser logging.")
+		fmt.Println("  Install: go install github.com/jellydn/devlog/cmd/devlog-host@latest")
+		allGood = false
+	} else {
+		fmt.Printf("✓ %s\n", hostPath)
+	}
+
+	// Check native messaging manifests
+	fmt.Printf("%-*s ", maxLabelLen, "Browser extension:")
+	chromeManifestPath := filepath.Join(natmsg.GetChromeNativeMessagingDir(), "com.devlog.host.json")
+	braveManifestPath := filepath.Join(natmsg.GetBraveNativeMessagingDir(), "com.devlog.host.json")
+	firefoxManifestPaths := []string{}
+	for _, dir := range natmsg.GetFirefoxNativeMessagingDirs() {
+		firefoxManifestPaths = append(firefoxManifestPaths, filepath.Join(dir, "com.devlog.host.json"))
+	}
+
+	chromeRegistered := false
+	if _, err := os.Stat(chromeManifestPath); err == nil {
+		chromeRegistered = true
+	}
+
+	braveRegistered := false
+	if _, err := os.Stat(braveManifestPath); err == nil {
+		braveRegistered = true
+	}
+
+	firefoxRegistered := false
+	for _, path := range firefoxManifestPaths {
+		if _, err := os.Stat(path); err == nil {
+			firefoxRegistered = true
+			break
+		}
+	}
+
+	if chromeRegistered || braveRegistered || firefoxRegistered {
+		registered := []string{}
+		if chromeRegistered {
+			registered = append(registered, "Chrome")
+		}
+		if braveRegistered {
+			registered = append(registered, "Brave")
+		}
+		if firefoxRegistered {
+			registered = append(registered, "Firefox")
+		}
+		fmt.Printf("✓ Registered for %s\n", strings.Join(registered, ", "))
+	} else {
+		fmt.Println("✗ NOT REGISTERED")
+		fmt.Println("  Browser extension is not registered.")
+		fmt.Println("  Register: devlog register --chrome --extension-id <id>")
+		fmt.Println("            devlog register --brave --extension-id <id>")
+		fmt.Println("            devlog register --firefox")
+		allGood = false
+	}
+
+	fmt.Println()
+	if allGood {
+		fmt.Println("✓ All checks passed! You're ready to use devlog.")
+		return nil
+	}
+
+	fmt.Println("⚠ Some checks failed. Please address the issues above.")
+	return fmt.Errorf("healthcheck failed")
 }

@@ -699,14 +699,14 @@ func cmdHealthcheck(cfg *config.Config, args []string) error {
 
 	// Check tmux
 	fmt.Print("tmux:                    ")
-	if err := exec.Command("tmux", "-V").Run(); err != nil {
+	cmd := exec.Command("tmux", "-V")
+	output, err := cmd.Output()
+	if err != nil {
 		fmt.Println("✗ NOT FOUND")
 		fmt.Println("  tmux is required to run devlog.")
 		fmt.Println("  Install: https://github.com/tmux/tmux/wiki/Installing")
 		allGood = false
 	} else {
-		cmd := exec.Command("tmux", "-V")
-		output, _ := cmd.Output()
 		version := strings.TrimSpace(string(output))
 		fmt.Printf("✓ %s\n", version)
 	}

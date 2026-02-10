@@ -100,7 +100,7 @@
         "Send messages to native host via runtime.connectNative",
         "Filter by configured URLs"
       ],
-      "passes": false,
+      "passes": true,
       "priority": 7
     },
     {

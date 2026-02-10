@@ -16,18 +16,20 @@ import (
 const usage = `Usage: devlog <command> [args...]
 
 Commands:
-  init     Create a devlog.yml template in current directory
-  up       Start tmux session and browser logging
-  down     Stop tmux session and flush logs
-  attach   Attach to the running tmux session
-  status   Show session state and log paths
-  ls       List log runs
-  open     Open logs directory in file manager
-  register Register native messaging host for browser logging
-  help     Show this help message
+  init        Create a devlog.yml template in current directory
+  up          Start tmux session and browser logging
+  down        Stop tmux session and flush logs
+  attach      Attach to the running tmux session
+  status      Show session state and log paths
+  ls          List log runs
+  open        Open logs directory in file manager
+  register    Register native messaging host for browser logging
+  healthcheck Check system requirements (tmux, browser extension)
+  help        Show this help message
 
 Examples:
   devlog init
+  devlog healthcheck
   devlog up
   devlog attach
   devlog status
@@ -39,15 +41,16 @@ Examples:
 type Command func(cfg *config.Config, args []string) error
 
 var commands = map[string]Command{
-	"init":     cmdInit,
-	"up":       cmdUp,
-	"down":     cmdDown,
-	"attach":   cmdAttach,
-	"status":   cmdStatus,
-	"ls":       cmdLs,
-	"open":     cmdOpen,
-	"help":     cmdHelp,
-	"register": cmdRegister,
+	"init":        cmdInit,
+	"up":          cmdUp,
+	"down":        cmdDown,
+	"attach":      cmdAttach,
+	"status":      cmdStatus,
+	"ls":          cmdLs,
+	"open":        cmdOpen,
+	"help":        cmdHelp,
+	"register":    cmdRegister,
+	"healthcheck": cmdHealthcheck,
 }
 
 func main() {
@@ -65,7 +68,7 @@ func main() {
 	}
 
 	// Commands that don't need config
-	if command == "init" || command == "register" {
+	if command == "init" || command == "register" || command == "healthcheck" {
 		runCommandWithoutConfig(command)
 		return
 	}
@@ -685,4 +688,85 @@ func openInFileManager(path string) error {
 	}
 
 	return exec.Command(cmd, args...).Start()
+}
+
+func cmdHealthcheck(cfg *config.Config, args []string) error {
+	fmt.Println("devlog healthcheck")
+	fmt.Println("==================")
+	fmt.Println()
+
+	allGood := true
+
+	// Check tmux
+	fmt.Print("tmux:                    ")
+	if err := exec.Command("tmux", "-V").Run(); err != nil {
+		fmt.Println("✗ NOT FOUND")
+		fmt.Println("  tmux is required to run devlog.")
+		fmt.Println("  Install: https://github.com/tmux/tmux/wiki/Installing")
+		allGood = false
+	} else {
+		cmd := exec.Command("tmux", "-V")
+		output, _ := cmd.Output()
+		version := strings.TrimSpace(string(output))
+		fmt.Printf("✓ %s\n", version)
+	}
+
+	// Check devlog-host binary
+	fmt.Print("devlog-host binary:      ")
+	hostPath, err := natmsg.FindDevlogHostBinary()
+	if err != nil {
+		fmt.Println("✗ NOT FOUND")
+		fmt.Println("  devlog-host is required for browser logging.")
+		fmt.Println("  Install: go install github.com/jellydn/devlog/cmd/devlog-host@latest")
+		allGood = false
+	} else {
+		fmt.Printf("✓ %s\n", hostPath)
+	}
+
+	// Check native messaging manifests
+	fmt.Print("Browser extension:       ")
+	chromeManifestPath := filepath.Join(natmsg.GetChromeNativeMessagingDir(), "com.devlog.host.json")
+	firefoxManifestPaths := []string{}
+	for _, dir := range natmsg.GetFirefoxNativeMessagingDirs() {
+		firefoxManifestPaths = append(firefoxManifestPaths, filepath.Join(dir, "com.devlog.host.json"))
+	}
+
+	chromeRegistered := false
+	if _, err := os.Stat(chromeManifestPath); err == nil {
+		chromeRegistered = true
+	}
+
+	firefoxRegistered := false
+	for _, path := range firefoxManifestPaths {
+		if _, err := os.Stat(path); err == nil {
+			firefoxRegistered = true
+			break
+		}
+	}
+
+	if chromeRegistered || firefoxRegistered {
+		registered := []string{}
+		if chromeRegistered {
+			registered = append(registered, "Chrome")
+		}
+		if firefoxRegistered {
+			registered = append(registered, "Firefox")
+		}
+		fmt.Printf("✓ Registered for %s\n", strings.Join(registered, ", "))
+	} else {
+		fmt.Println("✗ NOT REGISTERED")
+		fmt.Println("  Browser extension is not registered.")
+		fmt.Println("  Register: devlog register --chrome --extension-id <id>")
+		fmt.Println("            devlog register --firefox")
+		allGood = false
+	}
+
+	fmt.Println()
+	if allGood {
+		fmt.Println("✓ All checks passed! You're ready to use devlog.")
+		return nil
+	}
+
+	fmt.Println("⚠ Some checks failed. Please address the issues above.")
+	return fmt.Errorf("healthcheck failed")
 }

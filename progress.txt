@@ -1,0 +1,7 @@
+## Codebase Patterns
+
+## 2026-02-10 - Project Setup
+- Created PRD with user stories for devlog MVP
+- US-001 (Config loading) already implemented
+- Starting with US-002 (CLI scaffold)
+

@@ -13,14 +13,14 @@ import (
 
 // Message represents a log message from the browser extension
 type Message struct {
-	Type      string `json:"type"`
-	Level     string `json:"level"`
-	Message   string `json:"message"`
-	URL       string `json:"url"`
-	Timestamp int64  `json:"timestamp"`
-	Source    string `json:"source,omitempty"`
-	Line      int    `json:"line,omitempty"`
-	Column    int    `json:"column,omitempty"`
+	Type      string      `json:"type"`
+	Level     string      `json:"level"`
+	Message   string      `json:"message"`
+	URL       string      `json:"url"`
+	Timestamp interface{} `json:"timestamp"`
+	Source    string       `json:"source,omitempty"`
+	Line      interface{} `json:"line,omitempty"`
+	Column    interface{} `json:"column,omitempty"`
 }
 
 // Host handles native messaging communication

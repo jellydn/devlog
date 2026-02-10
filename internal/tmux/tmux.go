@@ -52,6 +52,12 @@ func (r *Runner) CreateSession(logsDir string, windows []WindowConfig) error {
 		return fmt.Errorf("failed to create tmux session: %w", err)
 	}
 
+	// Store logs directory as a tmux session environment variable for later retrieval
+	setEnv := exec.Command("tmux", "set-environment", "-t", r.sessionName, "DEVLOG_LOGS_DIR", logsDir)
+	if err := setEnv.Run(); err != nil {
+		return fmt.Errorf("failed to set logs dir env: %w", err)
+	}
+
 	// Send command to first pane with logging
 	// Use window name in target - tmux will target the active pane in that window
 	firstWindowTarget := fmt.Sprintf("%s:%s", r.sessionName, firstWindow.Name)
@@ -123,24 +129,19 @@ func (r *Runner) splitWindow(target string, command, logsDir, logFile string) er
 	return nil
 }
 
-// sendCommandWithLogging sends a command to a pane with output redirected to log file
+// sendCommandWithLogging sends a command to a pane with output captured via pipe-pane
 func (r *Runner) sendCommandWithLogging(target, command, logsDir, logFile string) error {
-	// Create log file path
-	logPath := filepath.Join(logsDir, logFile)
-
-	// Create the log file if it doesn't exist (so tee can write to it)
 	if logFile != "" {
-		f, err := os.Create(logPath)
-		if err != nil {
-			return fmt.Errorf("failed to create log file: %w", err)
+		logPath := filepath.Join(logsDir, logFile)
+
+		pipeCmd := fmt.Sprintf("cat >> %s", logPath)
+		cmd := exec.Command("tmux", "pipe-pane", "-t", target, "-o", pipeCmd)
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to set up pipe-pane logging: %w", err)
 		}
-		f.Close()
 	}
 
-	// Send keys to start script that runs command and logs output
-	// We use a subshell to capture both stdout and stderr
-	script := fmt.Sprintf("(%s) 2>&1 | tee -a %s", command, logPath)
-	cmd := exec.Command("tmux", "send-keys", "-t", target, script, "C-m")
+	cmd := exec.Command("tmux", "send-keys", "-t", target, command, "C-m")
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to send command: %w", err)
 	}
@@ -203,6 +204,20 @@ func (r *Runner) getPaneIDs() ([]string, error) {
 		}
 	}
 	return ids, nil
+}
+
+// GetLogsDir retrieves the logs directory stored in the tmux session environment
+func (r *Runner) GetLogsDir() string {
+	cmd := exec.Command("tmux", "show-environment", "-t", r.sessionName, "DEVLOG_LOGS_DIR")
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	line := strings.TrimSpace(string(output))
+	if _, val, ok := strings.Cut(line, "="); ok {
+		return val
+	}
+	return ""
 }
 
 // GetSessionInfo returns information about the session

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"io"
 	"testing"
 )
@@ -28,10 +29,10 @@ func TestHost_ReadMessage_Success(t *testing.T) {
 		Level:     "error",
 		Message:   "Test error message",
 		URL:       "http://example.com",
-		Timestamp: 1234567890,
+		Timestamp: float64(1234567890),
 		Source:    "app.js",
-		Line:      42,
-		Column:    10,
+		Line:      float64(42),
+		Column:    float64(10),
 	}
 
 	data := encodeMessage(t, inputMsg)
@@ -55,17 +56,17 @@ func TestHost_ReadMessage_Success(t *testing.T) {
 	if msg.URL != inputMsg.URL {
 		t.Errorf("URL = %q, want %q", msg.URL, inputMsg.URL)
 	}
-	if msg.Timestamp != inputMsg.Timestamp {
-		t.Errorf("Timestamp = %d, want %d", msg.Timestamp, inputMsg.Timestamp)
+	if fmt.Sprintf("%v", msg.Timestamp) != fmt.Sprintf("%v", inputMsg.Timestamp) {
+		t.Errorf("Timestamp = %v, want %v", msg.Timestamp, inputMsg.Timestamp)
 	}
 	if msg.Source != inputMsg.Source {
 		t.Errorf("Source = %q, want %q", msg.Source, inputMsg.Source)
 	}
-	if msg.Line != inputMsg.Line {
-		t.Errorf("Line = %d, want %d", msg.Line, inputMsg.Line)
+	if fmt.Sprintf("%v", msg.Line) != fmt.Sprintf("%v", inputMsg.Line) {
+		t.Errorf("Line = %v, want %v", msg.Line, inputMsg.Line)
 	}
-	if msg.Column != inputMsg.Column {
-		t.Errorf("Column = %d, want %d", msg.Column, inputMsg.Column)
+	if fmt.Sprintf("%v", msg.Column) != fmt.Sprintf("%v", inputMsg.Column) {
+		t.Errorf("Column = %v, want %v", msg.Column, inputMsg.Column)
 	}
 }
 

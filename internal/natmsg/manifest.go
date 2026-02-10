@@ -2,6 +2,7 @@ package natmsg
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -42,6 +43,10 @@ func GetChromeNativeMessagingDir() string {
 
 func GetFirefoxNativeMessagingDir() string {
 	return getFirefoxDirs()[0]
+}
+
+func GetFirefoxNativeMessagingDirs() []string {
+	return getFirefoxDirs()
 }
 
 func getFirefoxDirs() []string {
@@ -128,35 +133,91 @@ func UpdateManifestPath(newPath string) error {
 	dirs := append([]string{GetChromeNativeMessagingDir()}, getFirefoxDirs()...)
 	manifestFile := "com.devlog.host.json"
 	updated := false
+	var updateErrors []string
 
 	for _, dir := range dirs {
 		manifestPath := filepath.Join(dir, manifestFile)
 		data, err := os.ReadFile(manifestPath)
 		if err != nil {
+			if !errors.Is(err, os.ErrNotExist) {
+				updateErrors = append(updateErrors, fmt.Sprintf("%s: %v", manifestPath, err))
+			}
 			continue
 		}
 
 		var raw map[string]interface{}
 		if err := json.Unmarshal(data, &raw); err != nil {
+			updateErrors = append(updateErrors, fmt.Sprintf("%s: invalid JSON: %v", manifestPath, err))
 			continue
 		}
 
 		raw["path"] = newPath
 		out, err := json.MarshalIndent(raw, "", "  ")
 		if err != nil {
+			updateErrors = append(updateErrors, fmt.Sprintf("%s: failed to marshal JSON: %v", manifestPath, err))
 			continue
 		}
 
 		if err := os.WriteFile(manifestPath, out, 0644); err != nil {
+			updateErrors = append(updateErrors, fmt.Sprintf("%s: failed to write file: %v", manifestPath, err))
 			continue
 		}
 		updated = true
+	}
+
+	if len(updateErrors) > 0 {
+		return fmt.Errorf("failed to update one or more native messaging manifests: %s", strings.Join(updateErrors, "; "))
 	}
 
 	if !updated {
 		return fmt.Errorf("no native messaging manifests found to update (run 'devlog register' first)")
 	}
 	return nil
+}
+
+func IsManifestPathInUse(targetPath string) (bool, error) {
+	dirs := append([]string{GetChromeNativeMessagingDir()}, getFirefoxDirs()...)
+	manifestFile := "com.devlog.host.json"
+	targetPath = filepath.Clean(targetPath)
+	foundManifest := false
+	var queryErrors []string
+
+	for _, dir := range dirs {
+		manifestPath := filepath.Join(dir, manifestFile)
+		data, err := os.ReadFile(manifestPath)
+		if err != nil {
+			if !errors.Is(err, os.ErrNotExist) {
+				queryErrors = append(queryErrors, fmt.Sprintf("%s: %v", manifestPath, err))
+			}
+			continue
+		}
+		foundManifest = true
+
+		var raw map[string]interface{}
+		if err := json.Unmarshal(data, &raw); err != nil {
+			queryErrors = append(queryErrors, fmt.Sprintf("%s: invalid JSON: %v", manifestPath, err))
+			continue
+		}
+
+		path, ok := raw["path"].(string)
+		if !ok {
+			continue
+		}
+
+		if filepath.Clean(path) == targetPath {
+			return true, nil
+		}
+	}
+
+	if len(queryErrors) > 0 {
+		return false, fmt.Errorf("failed to inspect one or more native messaging manifests: %s", strings.Join(queryErrors, "; "))
+	}
+
+	if !foundManifest {
+		return false, fmt.Errorf("no native messaging manifests found (run 'devlog register' first)")
+	}
+
+	return false, nil
 }
 
 func FindDevlogHostBinary() (string, error) {

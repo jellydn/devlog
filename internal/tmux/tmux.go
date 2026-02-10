@@ -237,10 +237,46 @@ func (r *Runner) GetSessionInfo() (*SessionInfo, error) {
 		fmt.Sscanf(parts[0], "%d", &window.Index)
 		window.Name = parts[1]
 		fmt.Sscanf(parts[2], "%d", &window.PaneCount)
+
+		// Get pane information for this window
+		panes, err := r.getWindowPanes(window.Index)
+		if err == nil {
+			window.Panes = panes
+		}
+
 		info.Windows = append(info.Windows, window)
 	}
 
 	return info, nil
+}
+
+// getWindowPanes returns information about all panes in a window
+func (r *Runner) getWindowPanes(windowIndex int) ([]PaneInfo, error) {
+	windowTarget := fmt.Sprintf("%s:%d", r.sessionName, windowIndex)
+	cmd := exec.Command("tmux", "list-panes", "-t", windowTarget, "-F", "#{pane_id}|#{pane_index}|#{pane_current_command}")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	var panes []PaneInfo
+	lines := strings.Split(string(output), "\n")
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, "|")
+		if len(parts) != 3 {
+			continue
+		}
+		var pane PaneInfo
+		pane.ID = parts[0]
+		fmt.Sscanf(parts[1], "%d", &pane.Index)
+		pane.Command = parts[2]
+		panes = append(panes, pane)
+	}
+
+	return panes, nil
 }
 
 // SessionInfo holds information about a tmux session
@@ -254,6 +290,14 @@ type WindowInfo struct {
 	Index     int
 	Name      string
 	PaneCount int
+	Panes     []PaneInfo
+}
+
+// PaneInfo holds information about a tmux pane
+type PaneInfo struct {
+	ID      string
+	Index   int
+	Command string
 }
 
 // WindowConfig represents a tmux window configuration

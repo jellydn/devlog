@@ -186,7 +186,10 @@ func cmdStatus(cfg *config.Config, args []string) error {
 	fmt.Println("\nStatus: Running")
 	fmt.Printf("Windows (%d):\n", len(info.Windows))
 	for _, w := range info.Windows {
-		fmt.Printf("  - %s (%d panes)\n", w.Name, w.PaneCount)
+		fmt.Printf("  [%d] %s (%d panes)\n", w.Index, w.Name, w.PaneCount)
+		for _, p := range w.Panes {
+			fmt.Printf("      pane %s: %s\n", p.ID, p.Command)
+		}
 	}
 
 	// Show log files
@@ -195,9 +198,37 @@ func cmdStatus(cfg *config.Config, args []string) error {
 	for _, w := range cfg.Tmux.Windows {
 		for _, p := range w.Panes {
 			if p.Log != "" {
-				fmt.Printf("  %s/%s\n", logsDir, p.Log)
+				logPath := filepath.Join(logsDir, p.Log)
+				status := "missing"
+				if _, err := os.Stat(logPath); err == nil {
+					status = "exists"
+				}
+				fmt.Printf("  %s (%s)\n", logPath, status)
 			}
 		}
+	}
+
+	// Show browser logging status
+	fmt.Println("\nBrowser logging:")
+	if len(cfg.Browser.URLs) > 0 {
+		fmt.Printf("  Status: enabled\n")
+		fmt.Printf("  URLs monitored (%d):\n", len(cfg.Browser.URLs))
+		for _, url := range cfg.Browser.URLs {
+			fmt.Printf("    - %s\n", url)
+		}
+		if cfg.Browser.File != "" {
+			browserLogPath := filepath.Join(logsDir, cfg.Browser.File)
+			status := "missing"
+			if _, err := os.Stat(browserLogPath); err == nil {
+				status = "exists"
+			}
+			fmt.Printf("  Log file: %s (%s)\n", browserLogPath, status)
+		}
+		if len(cfg.Browser.Levels) > 0 {
+			fmt.Printf("  Levels: %v\n", cfg.Browser.Levels)
+		}
+	} else {
+		fmt.Printf("  Status: disabled (no URLs configured)\n")
 	}
 
 	return nil

@@ -236,3 +236,20 @@ func TestRunner_CreateSession_CreatesLogsDir(t *testing.T) {
 	// Clean up
 	runner.KillSession()
 }
+
+func TestCheckVersion(t *testing.T) {
+	// Check if tmux is available
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skip("tmux not available in PATH")
+	}
+
+	version, err := CheckVersion()
+	if err != nil {
+		t.Fatalf("CheckVersion() failed: %v", err)
+	}
+
+	// Version should start with "tmux "
+	if !strings.HasPrefix(version, "tmux ") {
+		t.Errorf("CheckVersion() = %q, want version starting with 'tmux '", version)
+	}
+}

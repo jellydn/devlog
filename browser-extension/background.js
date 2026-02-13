@@ -18,19 +18,25 @@ let config = {
 
 // Connect to native messaging host
 function connectToNativeHost() {
+	if (isNativeHostConnected && nativePort) {
+		return true;
+	}
 	try {
 		nativePort = chrome.runtime.connectNative(NATIVE_HOST_NAME);
 		isNativeHostConnected = true;
 		console.log("devlog: Connected to native host");
 
 		nativePort.onDisconnect.addListener(() => {
-			console.log("devlog: Disconnected from native host");
+			const err = chrome.runtime.lastError;
+			console.log(
+				"devlog: Disconnected from native host",
+				err ? err.message : "",
+			);
 			isNativeHostConnected = false;
 			nativePort = null;
 		});
 
 		nativePort.onMessage.addListener((message) => {
-			// Handle messages from native host (acknowledgments)
 			if (message.type === "ACK") {
 				console.log("devlog: Received acknowledgment:", message.success);
 			}
@@ -54,10 +60,15 @@ function disconnectFromNativeHost() {
 	}
 }
 
+// Force reconnect to pick up new wrapper/manifest path
+function reconnectToNativeHost() {
+	disconnectFromNativeHost();
+	return connectToNativeHost();
+}
+
 // Send log message to native host
 function sendToNativeHost(message) {
 	if (!isNativeHostConnected || !nativePort) {
-		// Try to reconnect if not connected
 		if (!connectToNativeHost()) {
 			console.warn("devlog: Cannot send log - native host not connected");
 			return false;
@@ -81,11 +92,9 @@ function isUrlEnabled(url) {
 	}
 
 	return config.urls.some((pattern) => {
-		// Simple wildcard matching
-		// Convert pattern to regex
 		const regexPattern = pattern
-			.replace(/[.+^${}()|[\]\\]/g, "\\$&") // Escape special chars
-			.replace(/\*/g, ".*"); // Convert * to .*
+			.replace(/[.+^${}()|[\]\\]/g, "\\$&")
+			.replace(/\*/g, ".*");
 
 		const regex = new RegExp(regexPattern);
 		return regex.test(url);
@@ -105,7 +114,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 	}
 
 	if (message.type === "GET_CONFIG") {
-		// Content script is requesting configuration
 		const enabled = isUrlEnabled(message.url);
 		sendResponse({
 			enabled: enabled,
@@ -117,14 +125,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 	}
 
 	if (message.type === "CONTENT_SCRIPT_READY") {
-		// Content script has loaded
 		console.log("devlog: Content script ready for", message.url);
 		sendResponse({ received: true });
 		return true;
 	}
 
 	if (message.type === "LOG") {
-		// Forward log to native host
+		console.log("devlog: LOG received", message.level, (message.message || "").substring(0, 60));
 		const success = sendToNativeHost({
 			level: message.level,
 			url: message.url,
@@ -139,11 +146,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 	}
 
 	if (message.type === "UPDATE_CONFIG") {
-		// CLI is updating configuration
 		config = { ...config, ...message.config };
 		console.log("devlog: Configuration updated:", config);
 
-		// Notify all tabs to update their config
 		chrome.tabs.query({}, (tabs) => {
 			tabs.forEach((tab) => {
 				try {
@@ -158,7 +163,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 			});
 		});
 
-		// Connect or disconnect based on enabled state
 		if (config.enabled && !isNativeHostConnected) {
 			connectToNativeHost();
 		} else if (!config.enabled && isNativeHostConnected) {
@@ -169,20 +173,43 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 		return true;
 	}
 
+	if (message.type === "RECONNECT") {
+		console.log("devlog: Reconnect requested");
+		const success = reconnectToNativeHost();
+		sendResponse({ reconnected: success });
+		return true;
+	}
+
 	return false;
 });
 
-// Initialize connection on startup if enabled (deferred to avoid blocking script load)
-setTimeout(() => {
-	if (config.enabled) {
-		connectToNativeHost();
-	}
-}, 100);
+// In MV3 service workers, use chrome.runtime.onStartup and onInstalled
+// to initialize the native host connection reliably.
+// For MV2 (Firefox), the immediate connect also works.
+if (chrome.runtime.onStartup) {
+	chrome.runtime.onStartup.addListener(() => {
+		if (config.enabled) {
+			connectToNativeHost();
+		}
+	});
+}
+
+if (chrome.runtime.onInstalled) {
+	chrome.runtime.onInstalled.addListener(() => {
+		if (config.enabled) {
+			connectToNativeHost();
+		}
+	});
+}
+
+// Connect immediately for the initial load
+if (config.enabled) {
+	connectToNativeHost();
+}
 
 // Listen for browser action click (Chrome Manifest V3)
 if (chrome.action) {
 	chrome.action.onClicked.addListener((tab) => {
-		// Toggle logging for current tab
 		console.log("devlog: Toggle logging for", tab.url);
 	});
 }
@@ -190,7 +217,6 @@ if (chrome.action) {
 // Listen for browser action click (Firefox Manifest V2)
 if (chrome.browserAction) {
 	chrome.browserAction.onClicked.addListener((tab) => {
-		// Toggle logging for current tab
 		console.log("devlog: Toggle logging for", tab.url);
 	});
 }

@@ -31,21 +31,41 @@ The host reads length-prefixed JSON messages from stdin and writes formatted
 logs to the specified file. It runs until stdin is closed.
 `
 
+func filterBrowserArgs(args []string) []string {
+	var filtered []string
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "chrome-extension://") || strings.HasPrefix(arg, "moz-extension://") {
+			continue
+		}
+		filtered = append(filtered, arg)
+	}
+	return filtered
+}
+
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprint(os.Stderr, usage)
-		os.Exit(1)
+	var logPath string
+	var levels []string
+
+	args := filterBrowserArgs(os.Args[1:])
+
+	if len(args) >= 1 {
+		logPath = args[0]
+		levels = args[1:]
+	} else {
+		state, err := natmsg.ReadSessionState()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: no arguments provided and no active session found: %v\n", err)
+			fmt.Fprint(os.Stderr, usage)
+			os.Exit(1)
+		}
+		logPath = state.LogPath
+		levels = state.Levels
 	}
 
-	logPath := os.Args[1]
-	levels := os.Args[2:]
-
-	// Convert levels to lowercase for case-insensitive matching
 	for i, level := range levels {
 		levels[i] = strings.ToLower(level)
 	}
 
-	// Create logger
 	log, err := logger.New(logPath, levels)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: failed to create logger: %v\n", err)
@@ -53,34 +73,27 @@ func main() {
 	}
 	defer log.Close()
 
-	// Create native messaging host
 	host := natmsg.NewHost()
 
-	// Process messages until stdin is closed
 	for {
 		msg, err := host.ReadMessage()
 		if err != nil {
 			if err == io.EOF {
-				// Browser closed the connection, exit cleanly
 				break
 			}
-			// Log error but continue processing
 			fmt.Fprintf(os.Stderr, "Error reading message: %v\n", err)
 			host.SendAck(false, err.Error())
 			continue
 		}
 
-		// Write message to log file
 		if err := log.Log(msg); err != nil {
 			fmt.Fprintf(os.Stderr, "Error writing log: %v\n", err)
 			host.SendAck(false, err.Error())
 			continue
 		}
 
-		// Send acknowledgment
 		if err := host.SendAck(true, ""); err != nil {
 			fmt.Fprintf(os.Stderr, "Error sending ack: %v\n", err)
-			// Continue even if ack fails
 		}
 	}
 }

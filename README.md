@@ -176,14 +176,16 @@ browser-extension/
 ├── popup.js/popup.html  # Shared: Extension popup UI
 ├── icons/               # Shared: Extension icons
 ├── chrome/
-│   ├── manifest.json    # Chrome-specific manifest (v3)
+│   ├── manifest.json    # Chrome-specific manifest (v3, world: "MAIN")
 │   └── (copies of shared files)
 └── firefox/
     ├── manifest.json    # Firefox-specific manifest (v2)
     └── (copies of shared files)
 ```
 
-The shared files in the root `browser-extension/` directory are the source of truth. The `chrome/` and `firefox/` directories contain copies of these files (not symlinks, as browsers don't follow symlinks when loading unpacked extensions).
+The shared files in the root `browser-extension/` directory are the source of truth. The `chrome/` and `firefox/` directories contain copies of these files (not symlinks, as browsers don't follow symlinks when loading unpacked extensions). Each browser has its own `manifest.json` that is **not** synced — edit those directly.
+
+**Key difference:** Chrome's manifest uses `"world": "MAIN"` to inject `page_inject.js` directly into the page context at `document_start`, ensuring console capture starts before any page scripts run. Firefox's MV2 manifest does not support this, so the shared `content_script.js` auto-detects and falls back to `createElement("script")` injection.
 
 **Maintaining consistency:** After editing shared files, sync them to both browser directories:
 
@@ -191,12 +193,7 @@ The shared files in the root `browser-extension/` directory are the source of tr
 just sync-extensions
 ```
 
-Or manually:
-
-```sh
-cp browser-extension/{background,content_script,page_inject,popup}.{js,html} browser-extension/chrome/
-cp browser-extension/{background,content_script,page_inject,popup}.{js,html} browser-extension/firefox/
-```
+This copies JS, HTML, and icon files but **not** `manifest.json` (which is browser-specific).
 
 ## Requirements
 

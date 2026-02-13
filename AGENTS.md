@@ -162,3 +162,8 @@ The browser extension uses shared source files in `browser-extension/` that are 
 ```bash
 just sync-extensions
 ```
+
+**Important:** `manifest.json` files are browser-specific and are **not** synced. Edit them directly in `chrome/` or `firefox/`.
+
+- **Chrome (MV3):** Uses `"world": "MAIN"` in `content_scripts` to inject `page_inject.js` into the page context. Uses service worker events (`onStartup`, `onInstalled`) for native host connection.
+- **Firefox (MV2):** Uses `createElement("script")` injection (auto-detected by the shared `content_script.js`). Uses persistent background page.

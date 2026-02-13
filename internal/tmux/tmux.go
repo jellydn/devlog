@@ -44,13 +44,13 @@ func (r *Runner) CreateSession(logsDir string, windows []WindowConfig) error {
 	firstWindow := windows[0]
 	firstPane := firstWindow.Panes[0]
 
-	cmd := exec.Command("tmux", "new-session", "-d", "-s", r.sessionName, "-n", firstWindow.Name)
-	if err := cmd.Run(); err != nil {
+	cmd := exec.Command("tmux", "new-session", "-d", "-s", r.sessionName, "-n", firstWindow.Name, "-P", "-F", "#{pane_id}")
+	out, err := cmd.Output()
+	if err != nil {
 		return fmt.Errorf("failed to create tmux session: %w", err)
 	}
+	firstPaneID := strings.TrimSpace(string(out))
 
-	// Store logs directory as a tmux session environment variable for later retrieval
-	// Convert to absolute path to ensure consistent resolution from any working directory
 	absLogsDir, err := filepath.Abs(logsDir)
 	if err != nil {
 		return fmt.Errorf("failed to resolve absolute path for logs dir: %w", err)
@@ -60,22 +60,21 @@ func (r *Runner) CreateSession(logsDir string, windows []WindowConfig) error {
 		return fmt.Errorf("failed to set logs dir env: %w", err)
 	}
 
-	// Use window name in target - tmux will target the active pane in that window
 	firstWindowTarget := fmt.Sprintf("%s:%s", r.sessionName, firstWindow.Name)
-	if err := r.sendCommandWithLogging(firstWindowTarget, firstPane.Cmd, logsDir, firstPane.Log); err != nil {
+	if err := r.sendCommandWithLogging(firstPaneID, firstPane.Cmd, absLogsDir, firstPane.Log); err != nil {
 		return fmt.Errorf("failed to run command in first pane: %w", err)
 	}
 
 	for i := 1; i < len(firstWindow.Panes); i++ {
 		pane := firstWindow.Panes[i]
-		if err := r.splitWindow(firstWindowTarget, pane.Cmd, logsDir, pane.Log); err != nil {
+		if err := r.splitWindow(firstWindowTarget, pane.Cmd, absLogsDir, pane.Log); err != nil {
 			return fmt.Errorf("failed to create pane %d in window %s: %w", i, firstWindow.Name, err)
 		}
 	}
 
 	for i := 1; i < len(windows); i++ {
 		window := windows[i]
-		if err := r.createWindow(i, window, logsDir); err != nil {
+		if err := r.createWindow(i, window, absLogsDir); err != nil {
 			return fmt.Errorf("failed to create window %s: %w", window.Name, err)
 		}
 	}
@@ -85,15 +84,16 @@ func (r *Runner) CreateSession(logsDir string, windows []WindowConfig) error {
 
 // createWindow creates a new window with its panes
 func (r *Runner) createWindow(windowIndex int, window WindowConfig, logsDir string) error {
-	cmd := exec.Command("tmux", "new-window", "-t", r.sessionName, "-n", window.Name)
-	if err := cmd.Run(); err != nil {
+	cmd := exec.Command("tmux", "new-window", "-t", r.sessionName, "-n", window.Name, "-P", "-F", "#{pane_id}")
+	out, err := cmd.Output()
+	if err != nil {
 		return fmt.Errorf("failed to create window: %w", err)
 	}
+	firstPaneID := strings.TrimSpace(string(out))
 
-	// Target the window by name - tmux will use the active pane
 	firstPane := window.Panes[0]
 	windowTarget := fmt.Sprintf("%s:%s", r.sessionName, window.Name)
-	if err := r.sendCommandWithLogging(windowTarget, firstPane.Cmd, logsDir, firstPane.Log); err != nil {
+	if err := r.sendCommandWithLogging(firstPaneID, firstPane.Cmd, logsDir, firstPane.Log); err != nil {
 		return fmt.Errorf("failed to run command in first pane: %w", err)
 	}
 
@@ -109,13 +109,14 @@ func (r *Runner) createWindow(windowIndex int, window WindowConfig, logsDir stri
 
 // splitWindow splits the current window and runs a command with logging
 func (r *Runner) splitWindow(target string, command, logsDir, logFile string) error {
-	cmd := exec.Command("tmux", "split-window", "-h", "-t", target)
-	if err := cmd.Run(); err != nil {
+	cmd := exec.Command("tmux", "split-window", "-h", "-t", target, "-P", "-F", "#{pane_id}")
+	out, err := cmd.Output()
+	if err != nil {
 		return fmt.Errorf("failed to split window: %w", err)
 	}
 
-	// After split-window, the new pane is active, so we can send to the window
-	if err := r.sendCommandWithLogging(target, command, logsDir, logFile); err != nil {
+	paneID := strings.TrimSpace(string(out))
+	if err := r.sendCommandWithLogging(paneID, command, logsDir, logFile); err != nil {
 		return err
 	}
 
@@ -126,6 +127,10 @@ func (r *Runner) splitWindow(target string, command, logsDir, logFile string) er
 func (r *Runner) sendCommandWithLogging(target, command, logsDir, logFile string) error {
 	if logFile != "" {
 		logPath := filepath.Join(logsDir, logFile)
+
+		if err := os.MkdirAll(filepath.Dir(logPath), 0755); err != nil {
+			return fmt.Errorf("failed to create log subdirectory: %w", err)
+		}
 
 		// Quote the path to prevent command injection
 		escapedPath := "'" + strings.ReplaceAll(logPath, "'", "'\\''") + "'"

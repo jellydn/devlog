@@ -278,13 +278,21 @@ func cmdUp(cfg *config.Config, args []string) error {
 
 	fmt.Printf("Created tmux session '%s' with %d window(s)\n", cfg.Tmux.Session, len(windows))
 
-	// Set up browser logging wrapper if configured
+	// Set up browser logging state file
 	if len(cfg.Browser.URLs) > 0 && cfg.Browser.File != "" {
 		browserLogPath := filepath.Join(logsDir, cfg.Browser.File)
-		if err := writeBrowserHostWrapper(cfg.Tmux.Session, browserLogPath, cfg.Browser.Levels); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to set up browser logging wrapper: %v\n", err)
+		absLogPath, err := filepath.Abs(browserLogPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to resolve browser log path: %v\n", err)
 		} else {
-			fmt.Println("Browser logging: ready (wrapper updated)")
+			if err := os.MkdirAll(filepath.Dir(absLogPath), 0755); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to create browser log directory: %v\n", err)
+			}
+			if err := natmsg.WriteSessionState(absLogPath, cfg.Browser.Levels); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to write session state: %v\n", err)
+			} else {
+				fmt.Println("Browser logging: ready")
+			}
 		}
 	}
 
@@ -301,7 +309,7 @@ func cmdDown(cfg *config.Config, args []string) error {
 
 	// Check if session exists
 	if !runner.SessionExists() {
-		restoreBrowserHostWrapper(cfg.Tmux.Session)
+		natmsg.RemoveSessionState()
 		return fmt.Errorf("tmux session '%s' does not exist", cfg.Tmux.Session)
 	}
 
@@ -310,8 +318,8 @@ func cmdDown(cfg *config.Config, args []string) error {
 		return err
 	}
 
-	// Restore native messaging manifest to point to the real binary
-	restoreBrowserHostWrapper(cfg.Tmux.Session)
+	// Remove browser logging state file
+	natmsg.RemoveSessionState()
 
 	fmt.Printf("Stopped tmux session '%s'\n", cfg.Tmux.Session)
 
@@ -590,103 +598,6 @@ Examples:
 
 	fmt.Println("Registration complete!")
 	return nil
-}
-
-func browserHostWrapperPath(session string) string {
-	cacheDir, err := os.UserCacheDir()
-	if err != nil {
-		cacheDir = os.TempDir()
-	}
-	return filepath.Join(
-		cacheDir,
-		"devlog",
-		"wrappers",
-		fmt.Sprintf("devlog-host-wrapper-%s.sh", sanitizeSessionForFileName(session)),
-	)
-}
-
-func sanitizeSessionForFileName(session string) string {
-	if session == "" {
-		return "default"
-	}
-
-	var b strings.Builder
-	b.Grow(len(session))
-	for _, r := range session {
-		if (r >= 'a' && r <= 'z') ||
-			(r >= 'A' && r <= 'Z') ||
-			(r >= '0' && r <= '9') ||
-			r == '-' || r == '_' || r == '.' {
-			b.WriteRune(r)
-		} else {
-			b.WriteByte('-')
-		}
-	}
-
-	out := strings.Trim(b.String(), "-")
-	if out == "" {
-		return "default"
-	}
-	return out
-}
-
-func writeBrowserHostWrapper(session string, browserLogPath string, levels []string) error {
-	hostPath, err := natmsg.FindDevlogHostBinary()
-	if err != nil {
-		return err
-	}
-
-	absLogPath, err := filepath.Abs(browserLogPath)
-	if err != nil {
-		return err
-	}
-
-	wrapperPath := browserHostWrapperPath(session)
-	if err := os.MkdirAll(filepath.Dir(wrapperPath), 0755); err != nil {
-		return err
-	}
-
-	// Build script with proper shell escaping using positional parameters
-	// Use "$@" to safely pass arguments without re-parsing by the shell
-	var scriptArgs []string
-	scriptArgs = append(scriptArgs, shellQuote(hostPath), shellQuote(absLogPath))
-	for _, level := range levels {
-		scriptArgs = append(scriptArgs, shellQuote(level))
-	}
-	script := fmt.Sprintf("#!/bin/sh\nexec %s\n", strings.Join(scriptArgs, " "))
-	if err := os.WriteFile(wrapperPath, []byte(script), 0755); err != nil {
-		return err
-	}
-
-	if err := natmsg.UpdateManifestPath(wrapperPath); err != nil {
-		return fmt.Errorf("failed to update native messaging manifest: %w", err)
-	}
-
-	return nil
-}
-
-func restoreBrowserHostWrapper(session string) {
-	hostPath, err := natmsg.FindDevlogHostBinary()
-	if err != nil {
-		return
-	}
-
-	wrapperPath := browserHostWrapperPath(session)
-	inUse, err := natmsg.IsManifestPathInUse(wrapperPath)
-	if err == nil && inUse {
-		natmsg.UpdateManifestPath(hostPath)
-	}
-
-	os.Remove(wrapperPath)
-}
-
-// shellQuote returns a shell-escaped version of the string using single quotes.
-// Any single quotes in the input are escaped as '\”' to safely include them.
-func shellQuote(s string) string {
-	if s == "" {
-		return "''"
-	}
-	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 
 // openInFileManager opens the given path in the system file manager

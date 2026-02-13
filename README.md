@@ -185,6 +185,37 @@ Timestamped and level-tagged:
 - **Browser Extension**: Manifest V3 (Chrome) + Firefox. Captures console output from matching URLs.
 - **Native Host**: Go binary invoked by the extension via Native Messaging protocol. Writes log events to disk.
 
+### Browser Extension Structure
+
+The browser extension uses a shared codebase for both Chrome and Firefox:
+
+```
+browser-extension/
+├── page_inject.js       # Shared: Console capture logic (injected into pages)
+├── content_script.js    # Shared: Bridges page and background script
+├── background.js        # Shared: Native messaging communication
+├── popup.js/popup.html  # Shared: Extension popup UI
+├── icons/               # Shared: Extension icons
+├── chrome/
+│   ├── manifest.json    # Chrome-specific manifest (v3, world: "MAIN")
+│   └── (copies of shared files)
+└── firefox/
+    ├── manifest.json    # Firefox-specific manifest (v2)
+    └── (copies of shared files)
+```
+
+The shared files in the root `browser-extension/` directory are the source of truth. The `chrome/` and `firefox/` directories contain copies of these files (not symlinks, as browsers don't follow symlinks when loading unpacked extensions). Each browser has its own `manifest.json` that is **not** synced — edit those directly.
+
+**Key difference:** Chrome's manifest uses `"world": "MAIN"` to inject `page_inject.js` directly into the page context at `document_start`, ensuring console capture starts before any page scripts run. Firefox's MV2 manifest does not support this, so the shared `content_script.js` auto-detects and falls back to `createElement("script")` injection.
+
+**Maintaining consistency:** After editing shared files, sync them to both browser directories:
+
+```sh
+just sync-extensions
+```
+
+This copies JS, HTML, and icon files but **not** `manifest.json` (which is browser-specific).
+
 ## Requirements
 
 - Go 1.25+

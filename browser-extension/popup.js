@@ -7,23 +7,22 @@ document.addEventListener("DOMContentLoaded", () => {
 		if (chrome.runtime.lastError || !response) {
 			statusEl.textContent = "Unable to connect";
 			statusEl.className = "status disabled";
-			footerEl.textContent = "Extension error";
+			if (footerEl) footerEl.textContent = "Extension error";
 			return;
 		}
 
 		if (response.enabled && response.connected) {
 			statusEl.textContent = "Browser logging active";
 			statusEl.className = "status enabled";
-			footerEl.textContent = "Native host connected";
+			if (footerEl) footerEl.textContent = "Native host connected";
 		} else if (response.enabled) {
 			statusEl.textContent = "Enabled (host not connected)";
 			statusEl.className = "status disabled";
-			footerEl.textContent =
-				"Run: devlog register --chrome --extension-id <id>";
+			if (footerEl) footerEl.textContent = "Run: devlog register";
 		} else {
 			statusEl.textContent = "Browser logging disabled";
 			statusEl.className = "status disabled";
-			footerEl.textContent = "Logging is off";
+			if (footerEl) footerEl.textContent = "Logging is off";
 		}
 
 		if (response.urls && response.urls.length > 0) {

@@ -15,6 +15,7 @@
 	const currentUrl = window.location.href;
 	let isLoggingEnabled = false;
 	let logLevels = ["log", "info", "warn", "error", "debug", "trace"];
+	let messageCount = 0;
 
 	function updateConfig() {
 		try {
@@ -30,9 +31,17 @@
 					}
 					if (response) {
 						isLoggingEnabled = response.enabled;
+						debug(
+							"config updated: enabled=" +
+								isLoggingEnabled +
+								" url=" +
+								currentUrl,
+						);
 						if (response.levels) {
 							logLevels = response.levels.map((l) => l.toLowerCase());
 						}
+					} else {
+						debug("GET_CONFIG returned empty response");
 					}
 				},
 			);
@@ -49,22 +58,37 @@
 		}
 	});
 
-	// Inject page-level script via web_accessible_resources
+	// Inject page-level script into the MAIN world.
+	// Always attempt createElement injection as a fallback — the guard
+	// variable in page_inject.js prevents double-execution if the manifest
+	// world:"MAIN" entry also loaded it.
 	try {
 		const script = document.createElement("script");
 		script.src = chrome.runtime.getURL("page_inject.js");
-		(document.documentElement || document.head || document.body).appendChild(
-			script,
-		);
+		(document.documentElement || document.head || document.body).appendChild(script);
 		script.onload = () => script.remove();
+		debug("page_inject.js injected via createElement");
 	} catch (e) {
 		debug("script injection failed:", e);
 	}
 
 	// Listen for messages from injected page script
 	window.addEventListener("message", (event) => {
-		if (event.source !== window || !event.data || !event.data.__devlog) return;
-		if (!isLoggingEnabled) return;
+		if (!event.data || event.data.__devlog !== true) return;
+		if (typeof event.data.level !== "string" || typeof event.data.message !== "string") return;
+		messageCount++;
+		if (messageCount <= 3) {
+			debug("postMessage received #" + messageCount + ": level=" + event.data.level + " enabled=" + isLoggingEnabled);
+		}
+		if (!isLoggingEnabled) {
+			debug(
+				"dropping log (not enabled): " +
+					event.data.level +
+					": " +
+					(event.data.message || "").substring(0, 80),
+			);
+			return;
+		}
 		if (!logLevels.includes(event.data.level)) return;
 
 		let source = "inline";

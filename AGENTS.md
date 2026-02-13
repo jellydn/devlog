@@ -10,26 +10,59 @@ go build -o devlog ./cmd/devlog
 go build -o devlog-host ./cmd/devlog-host
 just devlog-dev     # Build both + symlink to ~/.local/bin
 
-# Install locally
+# Build both binaries and symlink to ~/.local/bin for easy testing
+just devlog-dev
+
+# Install both binaries locally
 go install ./cmd/devlog
 go install ./cmd/devlog-host
+
+# Verify code compiles without building
+just check
+
+# Clean build artifacts
+rm -f devlog devlog-host
 ```
 
 ## Test Commands
 
 ```bash
-go test ./...                          # All tests
-go test -v ./...                       # Verbose
-just test-one TestLoad_ValidConfig     # Single test
-go test -cover ./...                   # Coverage
-go test -race ./...                    # Race detection
-go test -tags=integration ./internal/tmux/  # Integration tests
-go test -short ./...                   # Skip integration tests
-just lint                              # Format + vet
-just ci                                # Lint + test
+# Run all tests
+go test ./...
+
+# Run with verbose output
+go test -v ./...
+
+# Run a single test by name
+go test -run TestLoad_ValidConfig ./...
+just test-one TestLoad_ValidConfig
+
+# Run with coverage
+go test -cover ./...
+
+# Run with race detection
+go test -race ./...
 ```
 
-Integration tests use `-tags=integration` and are skipped with `-short`.
+## Lint Commands
+
+```bash
+# Format code
+go fmt ./...
+
+# Check formatting without modifying files
+gofmt -l .
+
+# Vet code for issues
+go vet ./...
+
+# Full CI pipeline
+just lint
+just ci
+
+# If golangci-lint is available
+golangci-lint run
+```
 
 ## Code Style Guidelines
 
@@ -51,43 +84,26 @@ import (
 )
 ```
 
-### Formatting
+### Formatting, Types, Naming
 
-Use `gofmt` for formatting. Tabs for indentation. Aim for 100 characters max. No trailing whitespace.
-
-### Types
-
-Use structs with YAML tags (`yaml:"field_name"`). Use pointer receivers for methods that modify the struct.
-
-```go
-type Command func(cfg *config.Config, args []string) error
-```
-
-Define command function types for CLI commands.
-
-### Naming Conventions
+Use `gofmt`. Tabs for indentation. 100 chars max. No trailing whitespace. Use structs with YAML tags. Pointer receivers for methods modifying structs.
 
 - **Packages**: lowercase, no underscores (`config`, `tmux`)
 - **Functions**: CamelCase (`Load`, `ResolveLogsDir`, `cmdUp`)
 - **Variables**: camelCase (`configPath`, `logsDir`)
-- **Constants**: CamelCase for exported, camelCase for unexported
 - **Tests**: `TestFunctionName_Description` (`TestLoad_ValidConfig`)
 
 ### Error Handling
 
-Wrap errors with context: `fmt.Errorf("failed to read config: %w", err)`. Error messages start with lowercase.
-
-Prefix validation errors with context: `fmt.Errorf("config: version is required")`.
-
-Return errors instead of logging in library code. Use `t.Fatalf` for test setup errors, `t.Errorf` for assertions.
+Wrap errors: `fmt.Errorf("failed to read config: %w", err)`. Error messages start lowercase. Return errors in library code. Use `t.Fatalf` for test setup, `t.Errorf` for assertions.
 
 ### Comments
 
-Use `// ` for comments (space after slashes). Start with capital letter for exported items. Document all exported types and functions.
+Use `// ` (space after slashes). Capitalize exported items. Document all exported types/functions.
 
 ### Testing
 
-Use table-driven tests with `tests := []struct{...}`. Use `t.TempDir()` for temporary directories. Use subtests with `t.Run()` for clarity. Test names should describe the scenario clearly.
+Table-driven tests with `tests := []struct{...}`. Use `t.Run(tt.name, func(t *testing.T) {...})`. Use `t.TempDir()`.
 
 ## Project Structure
 
@@ -113,7 +129,13 @@ Use table-driven tests with `tests := []struct{...}`. Use `t.TempDir()` for temp
 │   └── logger/           # Logging utilities
 │       ├── logger.go
 │       └── logger_test.go
-├── browser-extension/    # Chrome/Firefox extension
+├── browser-extension/    # Shared extension source files
+│   ├── background.js     # Native messaging communication
+│   ├── content_script.js # Bridges page and background script
+│   ├── page_inject.js    # Console capture logic
+│   ├── popup.js/html     # Extension popup UI
+├── chrome/               # Chrome extension (copies of shared files)
+├── firefox/              # Firefox extension (copies of shared files)
 ├── go.mod
 ├── go.sum
 ├── justfile
@@ -138,3 +160,16 @@ Use table-driven tests with `tests := []struct{...}`. Use `t.TempDir()` for temp
 # Create devlog.yml from the example template
 just init
 ```
+
+## Browser Extension Maintenance
+
+The browser extension uses shared source files in `browser-extension/` that are copied to both `chrome/` and `firefox/` directories. After editing shared files, sync them:
+
+```bash
+just sync-extensions
+```
+
+**Important:** `manifest.json` files are browser-specific and are **not** synced. Edit them directly in `chrome/` or `firefox/`.
+
+- **Chrome (MV3):** Uses `"world": "MAIN"` in `content_scripts` to inject `page_inject.js` into the page context. Uses service worker events (`onStartup`, `onInstalled`) for native host connection.
+- **Firefox (MV2):** Uses `createElement("script")` injection (auto-detected by the shared `content_script.js`). Uses persistent background page.

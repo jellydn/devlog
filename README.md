@@ -58,6 +58,14 @@ go install github.com/jellydn/devlog/cmd/devlog-host@latest
 4. Select the `browser-extension/firefox` directory
 5. The extension icon should appear in your toolbar
 
+#### Brave
+
+1. Open Brave and navigate to `brave://extensions/`
+2. Enable "Developer mode" (toggle in top right)
+3. Click "Load unpacked"
+4. Select the `browser-extension/chrome` directory (Brave uses Chrome extensions)
+5. The extension icon should appear in your toolbar
+
 ## Quick Start
 
 Create a `devlog.yml` in your project root:
@@ -67,6 +75,10 @@ version: 1
 project: my-app
 logs_dir: ./logs
 run_mode: timestamped # timestamped | overwrite
+
+# Optional: Automatic log cleanup (for timestamped mode only)
+# max_runs: 10        # Keep only the 10 most recent log runs
+# retention_days: 30  # OR keep logs from the last 30 days
 
 tmux:
   session: my-app
@@ -107,7 +119,7 @@ devlog up
 | `devlog status`    | Show session state + log paths       |
 | `devlog ls`        | List log runs                        |
 | `devlog open`      | Open logs directory in file manager  |
-| `devlog register`  | Register native messaging host       |
+| `devlog register`  | Register native messaging host (Chrome, Brave, Firefox) |
 
 `devlog up` will error if a session is already running. Use `devlog down` first.
 
@@ -124,6 +136,15 @@ logs/
 ```
 
 With `run_mode: overwrite`, logs write directly to `logs/` without a timestamp subdirectory.
+
+### Log Cleanup
+
+When using `run_mode: timestamped`, you can configure automatic cleanup of old log directories:
+
+- **`max_runs`**: Keep only the N most recent log runs (e.g., `max_runs: 10`)
+- **`retention_days`**: Remove logs older than N days (e.g., `retention_days: 30`)
+
+Both options can be used together. Directories are removed if they exceed `max_runs` OR are older than `retention_days`. Cleanup runs automatically when `devlog up` starts a new session.
 
 ### Server Logs
 
@@ -199,7 +220,7 @@ This copies JS, HTML, and icon files but **not** `manifest.json` (which is brows
 
 - Go 1.25+
 - tmux
-- Chrome and/or Firefox
+- Chrome, Brave, and/or Firefox
 
 **Verify your setup:**
 
@@ -210,7 +231,7 @@ devlog healthcheck
 The healthcheck command verifies:
 - tmux is installed and accessible
 - devlog-host binary is available
-- Browser extension is registered (Chrome or Firefox)
+- Browser extension is registered (Chrome, Brave, or Firefox)
 
 If any checks fail, the command provides instructions on how to fix them.
 

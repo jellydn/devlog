@@ -5,11 +5,10 @@
 ## Build Commands
 
 ```bash
-# Build CLI binary
+# Build binaries
 go build -o devlog ./cmd/devlog
-
-# Build native messaging host
 go build -o devlog-host ./cmd/devlog-host
+just devlog-dev     # Build both + symlink to ~/.local/bin
 
 # Build both binaries and symlink to ~/.local/bin for easy testing
 just devlog-dev
@@ -76,6 +75,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
+	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -117,10 +120,12 @@ Table-driven tests with `tests := []struct{...}`. Use `t.Run(tt.name, func(t *te
 │   │   └── config_test.go
 │   ├── tmux/             # Tmux session management
 │   │   ├── tmux.go
-│   │   └── tmux_test.go
+│   │   ├── tmux_test.go
+│   │   └── integration_test.go
 │   ├── natmsg/           # Native messaging protocol
 │   │   ├── natmsg.go
-│   │   └── natmsg_test.go
+│   │   ├── natmsg_test.go
+│   │   └── manifest.go
 │   └── logger/           # Logging utilities
 │       ├── logger.go
 │       └── logger_test.go
@@ -133,6 +138,7 @@ Table-driven tests with `tests := []struct{...}`. Use `t.Run(tt.name, func(t *te
 ├── firefox/              # Firefox extension (copies of shared files)
 ├── go.mod
 ├── go.sum
+├── justfile
 └── devlog.yml.example    # Example configuration
 ```
 

@@ -110,8 +110,13 @@ The extension does not require a build step. All source files are included in th
 - manifest.json
 
 To package manually:
-cd browser-extension/firefox
-zip -r devlog-firefox.zip manifest.json background.js content_script.js page_inject.js popup.html popup.js icons/
+```bash
+# The packaging script handles this automatically, but for reference:
+# It creates a temporary directory with all necessary files and zips them
+./scripts/package-firefox.sh
+```
+
+See the packaging script for exact file structure.
 ```
 
 **Dependencies**: None (vanilla JavaScript only)

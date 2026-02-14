@@ -40,7 +40,11 @@ go install github.com/jellydn/devlog/cmd/devlog@latest
 go install github.com/jellydn/devlog/cmd/devlog-host@latest
 ```
 
-### Browser Extension (manual)
+### Browser Extension
+
+> **Coming Soon**: The extension will be available on Chrome Web Store and Firefox Add-ons for easy one-click installation.
+
+For now, load the extension manually:
 
 #### Chrome
 
@@ -203,6 +207,13 @@ The healthcheck command verifies:
 - Browser extension is registered (Chrome, Brave, or Firefox)
 
 If any checks fail, the command provides instructions on how to fix them.
+
+## Contributing
+
+Contributions are welcome! Please see:
+
+- [Browser Extension Store Submission Guide](doc/STORE_SUBMISSION.md) - For publishing to Chrome Web Store and Firefox Add-ons
+- [Screenshots Guide](doc/SCREENSHOTS.md) - For creating store submission screenshots
 
 ## License
 

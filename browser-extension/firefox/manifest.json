@@ -2,7 +2,9 @@
   "manifest_version": 2,
   "name": "devlog - Browser Log Capture",
   "version": "1.0.0",
-  "description": "Captures browser console logs and sends them to devlog native host",
+  "description": "Zero-code local development log capture. Captures browser console logs via native messaging and writes them to local files for debugging.",
+  "author": "Dung Huynh Duc",
+  "homepage_url": "https://github.com/jellydn/devlog",
   "browser_specific_settings": {
     "gecko": {
       "id": "devlog@devlog.local",
@@ -28,9 +30,10 @@
     }
   ],
   "icons": {
-    "16": "icons/icon.svg",
-    "48": "icons/icon.svg",
-    "128": "icons/icon.svg"
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
   },
   "web_accessible_resources": [
     "page_inject.js"
@@ -38,9 +41,10 @@
   "browser_action": {
     "default_popup": "popup.html",
     "default_icon": {
-      "16": "icons/icon.svg",
-      "48": "icons/icon.svg",
-      "128": "icons/icon.svg"
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
     }
   }
 }

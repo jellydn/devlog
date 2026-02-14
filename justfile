@@ -79,3 +79,14 @@ devlog-dev:
 # Create devlog.yml from example
 init:
     cp devlog.yml.example devlog.yml
+
+# Package browser extension for Chrome Web Store
+package-chrome:
+    ./scripts/package-chrome.sh
+
+# Package browser extension for Firefox Add-ons
+package-firefox:
+    ./scripts/package-firefox.sh
+
+# Package both browser extensions
+package-extensions: package-chrome package-firefox

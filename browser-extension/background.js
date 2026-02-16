@@ -24,6 +24,12 @@ function connectToNativeHost() {
 		console.log("devlog: Connected to native host");
 
 		nativePort.onDisconnect.addListener(() => {
+			if (chrome.runtime.lastError) {
+				console.error(
+					"devlog: Native host connection failed:",
+					chrome.runtime.lastError.message,
+				);
+			}
 			console.log("devlog: Disconnected from native host");
 			isNativeHostConnected = false;
 			nativePort = null;
@@ -38,7 +44,13 @@ function connectToNativeHost() {
 
 		return true;
 	} catch (error) {
-		console.error("devlog: Failed to connect to native host:", error);
+		console.error(
+			"devlog: Failed to connect to native host:",
+			error.message || error,
+		);
+		if (chrome.runtime.lastError) {
+			console.error("devlog: Runtime error:", chrome.runtime.lastError.message);
+		}
 		isNativeHostConnected = false;
 		return false;
 	}
@@ -68,7 +80,13 @@ function sendToNativeHost(message) {
 		nativePort.postMessage(message);
 		return true;
 	} catch (error) {
-		console.error("devlog: Failed to send message to native host:", error);
+		console.error(
+			"devlog: Failed to send message to native host:",
+			error.message || error,
+		);
+		if (chrome.runtime.lastError) {
+			console.error("devlog: Runtime error:", chrome.runtime.lastError.message);
+		}
 		isNativeHostConnected = false;
 		return false;
 	}

@@ -90,3 +90,7 @@ package-firefox:
 
 # Package both browser extensions
 package-extensions: package-chrome package-firefox
+
+# Validate screenshot dimensions for store submission
+validate-screenshots:
+    ./scripts/validate-screenshots.sh

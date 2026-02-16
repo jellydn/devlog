@@ -20,7 +20,7 @@ echo "Version: $VERSION"
 
 # Create temporary build directory
 BUILD_DIR=$(mktemp -d)
-trap "rm -rf $BUILD_DIR" EXIT
+trap 'rm -rf "$BUILD_DIR"' EXIT
 
 echo "Building extension in $BUILD_DIR..."
 

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "devlog - Browser Log Capture",
   "version": "1.0.0",
-  "description": "Zero-code local development log capture. Captures browser console logs via native messaging and writes them to local files for debugging.",
+  "description": "Zero-code local development log capture. Captures browser console logs and writes them to local files for debugging.",
   "author": "Dung Huynh Duc",
   "homepage_url": "https://github.com/jellydn/devlog",
   "permissions": [

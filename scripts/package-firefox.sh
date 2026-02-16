@@ -20,19 +20,19 @@ echo "Version: $VERSION"
 
 # Create temporary build directory
 BUILD_DIR=$(mktemp -d)
-trap "rm -rf $BUILD_DIR" EXIT
+trap 'rm -rf "$BUILD_DIR"' EXIT
 
 echo "Building extension in $BUILD_DIR..."
 
 # Copy Firefox-specific manifest
 cp "$FIREFOX_DIR/manifest.json" "$BUILD_DIR/"
 
-# Copy shared files
-cp "$EXTENSION_DIR/background.js" "$BUILD_DIR/"
-cp "$EXTENSION_DIR/content_script.js" "$BUILD_DIR/"
-cp "$EXTENSION_DIR/page_inject.js" "$BUILD_DIR/"
-cp "$EXTENSION_DIR/popup.html" "$BUILD_DIR/"
-cp "$EXTENSION_DIR/popup.js" "$BUILD_DIR/"
+# Copy Firefox-specific files
+cp "$FIREFOX_DIR/background.js" "$BUILD_DIR/"
+cp "$FIREFOX_DIR/content_script.js" "$BUILD_DIR/"
+cp "$FIREFOX_DIR/page_inject.js" "$BUILD_DIR/"
+cp "$FIREFOX_DIR/popup.html" "$BUILD_DIR/"
+cp "$FIREFOX_DIR/popup.js" "$BUILD_DIR/"
 
 # Copy icons
 mkdir -p "$BUILD_DIR/icons"

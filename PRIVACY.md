@@ -51,12 +51,13 @@ All collected data is:
 
 Log files are stored in the location you specify in your `devlog.yml` configuration file, typically in your project directory. The default structure is:
 
-```
+```text
 logs/
   browser/console.log
 ```
 
 You have full control over:
+
 - Where logs are stored
 - How long logs are kept
 - What URL patterns are monitored
@@ -85,6 +86,7 @@ You have complete control over the Extension:
 ## Third-Party Services
 
 The Extension does **NOT**:
+
 - Use any analytics or tracking services
 - Connect to any external APIs or servers
 - Share data with third parties
@@ -110,7 +112,7 @@ We may update this privacy policy from time to time. Any changes will be reflect
 If you have questions or concerns about this privacy policy, please:
 
 - Open an issue on GitHub: https://github.com/jellydn/devlog/issues
-- Email: [Your contact email - to be added]
+- Email: dung@productsway.com
 
 ## Your Rights
 

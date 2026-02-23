@@ -156,12 +156,24 @@ func InstallBraveManifest(hostPath string, extensionID string) error {
 }
 
 func InstallFirefoxManifest(hostPath string) error {
+	return InstallFirefoxManifestWithID(hostPath, "devlog@devlog.local")
+}
+
+func InstallFirefoxManifestWithID(hostPath string, extensionID string) error {
+	allowedExts := []string{extensionID}
+
+	// For development, also allow the UUID format which Firefox generates for unpacked extensions
+	// UUID format: {xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}
+	if strings.HasPrefix(extensionID, "{") {
+		allowedExts = []string{extensionID}
+	}
+
 	manifest := FirefoxManifest{
 		Name:              "com.devlog.host",
 		Description:       "devlog Native Messaging Host for Browser Log Capture",
 		Path:              hostPath,
 		Type:              "stdio",
-		AllowedExtensions: []string{"devlog@devlog.local"},
+		AllowedExtensions: allowedExts,
 	}
 
 	data, err := json.MarshalIndent(manifest, "", "  ")

@@ -1,146 +1,208 @@
-# Directory Structure
+# Codebase Structure
 
-**Analysis Date:** 2026-02-10
+**Analysis Date:** 2026-02-23
 
-## Layout Overview
-
+## Directory Layout
 ```
-.
-├── cmd/                        # Application entry points
-│   ├── devlog/                # Main CLI application
-│   │   └── main.go            # CLI entry point with command routing
-│   └── devlog-host/           # Native messaging host
-│       └── main.go            # Host entry point for browser communication
-│
-├── internal/                  # Private packages (no external imports)
-│   ├── config/                # Configuration management
-│   │   ├── config.go          # YAML loading with env interpolation
-│   │   └── config_test.go     # Config parsing tests
-│   ├── logger/                # Browser console log handling
-│   │   ├── logger.go          # Log filtering, formatting, file writing
-│   │   └── logger_test.go     # Logger and type conversion tests
-│   ├── natmsg/                # Native messaging protocol
-│   │   ├── natmsg.go          # Message types, protocol implementation
-│   │   ├── manifest.go        # Browser manifest installation
-│   │   └── natmsg_test.go     # Protocol tests
-│   └── tmux/                  # Tmux session management
-│       ├── tmux.go            # Session, pane, window operations
-│       └── tmux_test.go       # Tmux operations tests
-│
-├── browser-extension/         # Browser extension source
-│   ├── chrome/                # Chrome-specific files
-│   │   ├── manifest.json      # Chrome extension manifest
-│   │   └── page_inject.js    # Page console capture (Chrome variant)
-│   ├── firefox/               # Firefox-specific files
-│   │   ├── manifest.json      # Firefox extension manifest
-│   │   ├── background.js      # Firefox background script
-│   │   ├── content_script.js  # Firefox content script
-│   │   └── page_inject.js    # Page console capture (Firefox variant)
-│   ├── page_inject.js        # Shared page injection logic
-│   └── content_script.js     # Shared content script logic
-│
-├── .planning/                 # Planning and documentation
-│   └── codebase/             # Generated codebase documentation
-│
-├── devlog.yml.example         # Example configuration template
-├── go.mod                     # Go module definition
-├── go.sum                     # Go dependency lock file
-├── justfile                   # Build automation commands
-├── AGENTS.md                  # Project guidelines for AI agents
-├── CLAUDE.md                  # Project memory for Claude Code
-└── .goreleaser.yml           # Release configuration
+devlog/
+├── cmd/
+│   ├── devlog/                  # CLI binary entry point
+│   │   ├── main.go              # Command dispatcher + all subcommand implementations
+│   │   ├── healthcheck_test.go  # Tests for healthcheck command
+│   │   ├── init_test.go         # Tests for init command
+│   │   └── status_test.go       # Tests for status command
+│   └── devlog-host/             # Native messaging host binary
+│       └── main.go              # Stdin message loop → logger
+├── internal/
+│   ├── config/                  # YAML config loading & validation
+│   │   ├── config.go            # Config types, Load(), Validate(), CleanupOldRuns()
+│   │   └── config_test.go       # 603 lines of table-driven tests
+│   ├── tmux/                    # Tmux session management
+│   │   ├── tmux.go              # Runner, session/window/pane operations
+│   │   ├── tmux_test.go         # Unit tests (289 lines)
+│   │   └── integration_test.go  # Integration tests requiring tmux (629 lines)
+│   ├── natmsg/                  # Native messaging protocol
+│   │   ├── natmsg.go            # Host, Message, wire protocol (length-prefixed JSON)
+│   │   ├── natmsg_test.go       # Protocol tests (367 lines)
+│   │   ├── manifest.go          # Browser manifest install/update for Chrome/Brave/Firefox
+│   │   └── manifest_test.go     # Manifest tests (227 lines)
+│   └── logger/                  # Log file writer with level filtering
+│       ├── logger.go            # Logger struct, formatted line output
+│       └── logger_test.go       # Logger tests (323 lines)
+├── browser-extension/           # Browser extension (Chrome + Firefox)
+│   ├── background.js            # Service worker: native messaging port, message routing
+│   ├── content_script.js        # Content script: bridges page_inject ↔ background
+│   ├── page_inject.js           # Page-context script: wraps console.* methods
+│   ├── popup.html               # Extension popup UI
+│   ├── popup.js                 # Popup logic
+│   ├── icons/                   # Extension icons (SVG + PNG)
+│   ├── chrome/                  # Chrome-specific files
+│   │   ├── manifest.json        # Manifest V3
+│   │   └── page_inject.js       # Chrome-specific page inject
+│   └── firefox/                 # Firefox-specific files
+│       ├── manifest.json        # Manifest V2
+│       ├── background.js        # Firefox background script
+│       ├── content_script.js    # Firefox content script
+│       ├── page_inject.js       # Firefox page inject
+│       ├── popup.html           # Firefox popup
+│       ├── popup.js             # Firefox popup logic
+│       └── icons/               # Firefox icons
+├── doc/                         # Documentation
+│   ├── adr/                     # Architecture Decision Records (6 ADRs)
+│   ├── PUBLICATION_CHECKLIST.md # Extension store publication guide
+│   ├── SCREENSHOTS.md           # Screenshot guidelines
+│   └── STORE_SUBMISSION.md      # Store submission details
+├── scripts/                     # Build/packaging scripts
+│   ├── package-chrome.sh        # Chrome extension packaging
+│   ├── package-firefox.sh       # Firefox extension packaging
+│   ├── validate-screenshots.sh  # Screenshot dimension validator
+│   └── ralph/                   # Ralph autonomous agent config
+├── dist/                        # Packaged extension ZIPs (build output)
+├── go.mod                       # Go module: github.com/jellydn/devlog (Go 1.25+)
+├── go.sum                       # Dependency checksums
+├── justfile                     # Task runner (build, test, lint, dev)
+├── devlog.yml.example           # Example configuration template
+├── .goreleaser.yml              # GoReleaser config for binary releases
+├── .github/workflows/           # CI/CD (ci.yml, release.yml)
+├── AGENTS.md                    # AI agent guidelines
+├── CLAUDE.md                    # Claude-specific instructions
+├── README.md                    # Project documentation
+├── PRIVACY.md                   # Privacy policy
+└── renovate.json                # Dependency update config
 ```
 
-## Key Locations
+## Directory Purposes
+
+**`cmd/devlog/`:**
+- Purpose: Main CLI application — all user commands in a single file
+- Contains: Command dispatcher, 10 subcommand implementations, helper functions
+- Key files: `main.go` (862 lines — all CLI logic)
+
+**`cmd/devlog-host/`:**
+- Purpose: Standalone binary launched by browsers via native messaging
+- Contains: Message read loop that bridges native messaging → logger
+- Key files: `main.go` (86 lines)
+
+**`internal/config/`:**
+- Purpose: YAML configuration parsing, validation, env var interpolation, log retention cleanup
+- Contains: Config structs with YAML tags, Load/Validate pipeline
+- Key files: `config.go` (230 lines), `config_test.go` (603 lines)
+
+**`internal/tmux/`:**
+- Purpose: Tmux subprocess management — session creation, window/pane setup, pipe-pane logging, session teardown
+- Contains: `Runner` type wrapping `os/exec` calls to `tmux` binary
+- Key files: `tmux.go` (367 lines), `integration_test.go` (629 lines, requires `-tags=integration`)
+
+**`internal/natmsg/`:**
+- Purpose: Native Messaging wire protocol and browser manifest management
+- Contains: Length-prefixed JSON encoding/decoding, manifest JSON generation for Chrome/Brave/Firefox/Zen, binary discovery
+- Key files: `natmsg.go` (226 lines), `manifest.go` (314 lines)
+
+**`internal/logger/`:**
+- Purpose: Formatted log writing with level-based filtering and thread-safe file access
+- Contains: `Logger` struct with mutex, append-only file writes
+- Key files: `logger.go` (131 lines)
+
+**`browser-extension/`:**
+- Purpose: Browser extension for Chrome (Manifest V3) and Firefox (Manifest V2)
+- Contains: Console interception, content script bridging, native messaging client, popup UI
+- Key files: `background.js`, `content_script.js`, `page_inject.js`
+
+**`doc/adr/`:**
+- Purpose: Architecture Decision Records documenting key design choices
+- Contains: 6 ADRs covering Go choice, YAML config, tmux usage, native messaging, append-only logs, timestamped dirs
+
+## Key File Locations
+
+**Entry Points:**
+- `cmd/devlog/main.go`: CLI binary — `devlog` command
+- `cmd/devlog-host/main.go`: Native messaging host binary — `devlog-host` command
+- `browser-extension/background.js`: Browser extension service worker
 
 **Configuration:**
-- `internal/config/config.go:67` - `Load()` function for YAML parsing
-- `internal/config/config.go:25` - `ResolveLogsDir()` for path resolution
-- `devlog.yml.example:1` - Template for new configurations
+- `devlog.yml.example`: Example configuration template
+- `go.mod`: Go module definition (single dependency: `gopkg.in/yaml.v3`)
+- `justfile`: Task runner recipes (build, test, lint, dev, CI)
+- `.goreleaser.yml`: Release build configuration
+- `.github/workflows/ci.yml`: CI pipeline
+- `.github/workflows/release.yml`: Release pipeline
 
-**Tmux Operations:**
-- `internal/tmux/tmux.go:31` - `CreateSession()` for tmux setup
-- `internal/tmux/tmux.go:141` - `KillSession()` for graceful shutdown
-- `internal/tmux/tmux.go:210` - `GetSessionInfo()` for status reporting
+**Core Logic:**
+- `internal/config/config.go`: Config loading, validation, env interpolation, retention cleanup
+- `internal/tmux/tmux.go`: Tmux session lifecycle management
+- `internal/natmsg/natmsg.go`: Native Messaging wire protocol
+- `internal/natmsg/manifest.go`: Browser manifest installation
+- `internal/logger/logger.go`: Log file writer with level filtering
 
-**Native Messaging:**
-- `internal/natmsg/natmsg.go:56` - `ReadMessage()` protocol parsing
-- `internal/natmsg/natmsg.go:93` - `WriteResponse()` protocol writing
-- `internal/natmsg/manifest.go:78` - Chrome manifest installation
-- `internal/natmsg/manifest.go:105` - Firefox manifest installation
-
-**Logging:**
-- `internal/logger/logger.go:29` - `New()` logger constructor
-- `internal/logger/logger.go:77` - `Log()` main logging function
-- `internal/logger/logger.go:121` - `formatTimestamp()` type conversion
-
-**Browser Extension:**
-- `browser-extension/content_script.js:1` - Main bridge script
-- `browser-extension/page_inject.js:1` - Page-level console wrapper
-- `browser-extension/chrome/manifest.json:1` - Chrome extension config
-- `browser-extension/firefox/manifest.json:1` - Firefox extension config
+**Tests:**
+- `internal/config/config_test.go`: Config loading/validation tests
+- `internal/tmux/tmux_test.go`: Tmux unit tests
+- `internal/tmux/integration_test.go`: Tmux integration tests (build tag: `integration`)
+- `internal/natmsg/natmsg_test.go`: Protocol encoding/decoding tests
+- `internal/natmsg/manifest_test.go`: Manifest generation tests
+- `internal/logger/logger_test.go`: Logger formatting and filtering tests
+- `cmd/devlog/healthcheck_test.go`: Healthcheck command tests
+- `cmd/devlog/init_test.go`: Init command tests
+- `cmd/devlog/status_test.go`: Status command tests
 
 ## Naming Conventions
 
-**Packages:**
-- Lowercase, single words: `config`, `tmux`, `natmsg`, `logger`
-- No underscores or mixed case in package names
-
 **Files:**
-- `main.go` for package main entry points
-- `{package}_test.go` for test files in same package
-- `manifest.json` for browser extension manifests
-- `page_inject.js` and `content_script.js` for extension scripts
+- Go source: `snake_case.go` (e.g., `config.go`, `natmsg.go`, `integration_test.go`)
+- Test files: `*_test.go` colocated with source
+- JS files: `snake_case.js` (e.g., `content_script.js`, `page_inject.js`)
+- Scripts: `kebab-case.sh` (e.g., `package-chrome.sh`)
 
-**Go Code:**
-- **Types:** PascalCase - `Runner`, `Config`, `Message`, `Logger`
-- **Interfaces:** Usually not used, concrete structs preferred
-- **Functions:** CamelCase - `NewRunner`, `CreateSession`, `WriteResponse`
-- **Constants:** PascalCase for exported, camelCase for unexported
-- **Methods:** PascalCase receivers - `(r *Runner) SessionExists()`
+**Directories:**
+- Go packages: lowercase single-word (e.g., `config`, `tmux`, `natmsg`, `logger`)
+- Commands: kebab-case binary names (e.g., `devlog`, `devlog-host`)
+- Browser: `browser-extension/` with `chrome/` and `firefox/` subdirs
 
-**JavaScript:**
-- camelCase for functions and variables
-- PascalCase for constructors (rare)
-- Constants: UPPER_SNAKE_CASE
+**Go Naming:**
+- Exported: `CamelCase` (e.g., `NewRunner`, `CreateSession`, `SessionInfo`)
+- Unexported: `camelCase` (e.g., `cmdUp`, `sendCommandWithLogging`)
+- Test functions: `TestFunctionName_Description` (e.g., `TestLoad_ValidConfig`)
 
-## File Organization Patterns
+## Where to Add New Code
 
-**Command Structure:**
-- Each top-level command has a `cmd{Name}` function in `main.go`
-- Commands that need config receive `*config.Config`
-- Commands that don't need config (init, register) receive `nil`
+**New CLI Command:**
+- Add handler function in `cmd/devlog/main.go`
+- Add to `commands` map in `cmd/devlog/main.go`
+- Add to `usage` string in `cmd/devlog/main.go`
+- Add tests in `cmd/devlog/<command>_test.go`
 
-**Internal Package Structure:**
-- Each package has a single main file (e.g., `tmux.go`, `logger.go`)
-- Test files alongside implementation
-- Types used by multiple packages defined in their respective packages
+**New Internal Package:**
+- Create `internal/<package>/` directory
+- Follow existing patterns: exported types + constructor + methods
+- Add `*_test.go` colocated with source
 
-**Browser Extension Structure:**
-- Platform-specific subdirectories (`chrome/`, `firefox/`)
-- Shared files at root level for common logic
-- Manifest files in platform-specific directories
+**New Browser Extension Feature:**
+- Chrome: modify files in `browser-extension/` (shared) or `browser-extension/chrome/`
+- Firefox: modify files in `browser-extension/firefox/`
+- Update `manifest.json` in both `chrome/` and `firefox/` directories
 
-## Import Conventions
+**New Config Field:**
+- Add struct field with YAML tag in `internal/config/config.go`
+- Add validation in `Config.Validate()`
+- Update `devlog.yml.example`
+- Add tests in `internal/config/config_test.go`
 
-**Standard library first**, then third-party:
-```go
-import (
-    "fmt"
-    "os"
+## Special Directories
 
-    "gopkg.in/yaml.v3"
-)
-```
+**`dist/`:**
+- Purpose: Build output for packaged browser extensions (ZIP files)
+- Generated by: `scripts/package-chrome.sh` and `scripts/package-firefox.sh`
 
-**Internal imports use full module path:**
-```go
-import (
-    "github.com/jellydn/devlog/internal/config"
-    "github.com/jellydn/devlog/internal/tmux"
-)
-```
+**`doc/adr/`:**
+- Purpose: Architecture Decision Records documenting rationale for key design choices
+- Convention: Numbered `NNNN-title.md` format
+
+**`scripts/ralph/`:**
+- Purpose: Configuration for the Ralph autonomous agent (PRD, prompts, progress tracking)
+
+**`.github/workflows/`:**
+- Purpose: GitHub Actions CI/CD pipelines
+- Contains: `ci.yml` (lint + test), `release.yml` (GoReleaser)
 
 ---
-
-*Structure analysis: 2026-02-10*
+*Structure analysis: 2026-02-23*

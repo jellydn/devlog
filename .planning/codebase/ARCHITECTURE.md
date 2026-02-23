@@ -1,170 +1,161 @@
-# System Architecture
+# Architecture
 
-**Analysis Date:** 2026-02-10
+**Analysis Date:** 2026-02-23
 
-## High-Level Pattern
+## Pattern Overview
+**Overall:** Multi-binary CLI tool with browser extension sidecar
 
-**Architecture Type:** CLI Tool with Browser Extension
-- Native messaging bridge between browser and local tmux sessions
-- Dual-process architecture: main CLI + native messaging host
-- Browser extension injects page scripts to capture console logs
+**Key Characteristics:**
+- Two Go binaries (`devlog` CLI and `devlog-host` native messaging host) communicating indirectly via tmux sessions and file-based logging
+- Browser extension (Chrome/Firefox) captures console logs and forwards them to `devlog-host` via the Native Messaging protocol
+- YAML-driven configuration with environment variable interpolation
+- Append-only log files with timestamped run directories for isolation
+- Minimal dependencies — only `gopkg.in/yaml.v3` beyond the Go standard library
 
-## Core Components
+## Layers
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         User Interface                          │
-│  CLI Commands: init, up, down, attach, status, ls, open, register  │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      Main CLI (devlog)                          │
-│  - Config loading (YAML with env interpolation)                 │
-│  - Command routing and validation                               │
-│  - Tmux session management                                     │
-│  - Browser wrapper script generation                           │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                ┌───────────────┴───────────────┐
-                ▼                               ▼
-┌──────────────────────┐        ┌──────────────────────────────┐
-│   Tmux Integration   │        │   Browser Extension Bridge   │
-│                      │        │                              │
-│ - Session creation   │        │ - Native messaging protocol │
-│ - Pane management    │        │ - Wrapper script management │
-│ - Log capture        │        │ - Manifest installation     │
-└──────────────────────┘        └──────────────────────────────┘
-                                        │
-                                        ▼
-                              ┌─────────────────────────┐
-                              │  Native Messaging Host   │
-                              │  (devlog-host)           │
-                              │                          │
-                              │ - JSON message parsing   │
-                              │ - Log level filtering    │
-                              │ - File writing           │
-                              └─────────────────────────┘
-```
+**CLI Layer (cmd/devlog):**
+- Purpose: User-facing command dispatcher for managing dev logging sessions
+- Location: `cmd/devlog/main.go`
+- Contains: Command definitions (`cmdUp`, `cmdDown`, `cmdAttach`, `cmdStatus`, `cmdLs`, `cmdOpen`, `cmdInit`, `cmdRegister`, `cmdHealthcheck`), config discovery, shell wrapper generation
+- Depends on: `internal/config`, `internal/tmux`, `internal/natmsg`
+- Used by: End users via terminal
 
-## Layers & Data Flow
+**Native Messaging Host Layer (cmd/devlog-host):**
+- Purpose: Receives browser console log messages via stdin (Native Messaging protocol) and writes them to disk
+- Location: `cmd/devlog-host/main.go`
+- Contains: Message read loop, log writing orchestration
+- Depends on: `internal/natmsg`, `internal/logger`
+- Used by: Browser extension (launched by the browser as a native messaging host process)
 
 **Configuration Layer:**
-- `internal/config/` - YAML parsing with environment variable interpolation
-- Config resolution for logs directory (timestamped/overwrite modes)
+- Purpose: YAML config loading, validation, environment variable interpolation, retention policy cleanup
+- Location: `internal/config/config.go`
+- Contains: `Config`, `TmuxConfig`, `WindowConfig`, `PaneConfig`, `BrowserConfig` structs; `Load()`, `Validate()`, `ResolveLogsDir()`, `CleanupOldRuns()` functions
+- Depends on: `gopkg.in/yaml.v3`
+- Used by: CLI layer
 
-**Tmux Abstraction Layer:**
-- `internal/tmux/` - Session, window, and pane management
-- Log capture via `pipe-pane` with shell command execution
-- Environment variable storage for cross-command communication
+**Tmux Layer:**
+- Purpose: Manages tmux sessions, windows, and panes with pipe-pane log capture
+- Location: `internal/tmux/tmux.go`
+- Contains: `Runner` struct with session lifecycle methods (`CreateSession`, `KillSession`, `SessionExists`, `GetSessionInfo`); `WindowConfig`, `PaneConfig` (local duplicates for decoupling)
+- Depends on: `tmux` binary (external process via `os/exec`)
+- Used by: CLI layer
 
-**Messaging Layer:**
-- `internal/natmsg/` - Native messaging protocol implementation
-- Length-prefixed JSON messages over stdin/stdout
-- Type-safe message structs with `interface{}` for flexible timestamp/line handling
+**Native Messaging Protocol Layer:**
+- Purpose: Implements the browser Native Messaging wire protocol (length-prefixed JSON over stdin/stdout) and manages browser manifest registration
+- Location: `internal/natmsg/natmsg.go`, `internal/natmsg/manifest.go`
+- Contains: `Host` (read/write messages), `Message`/`Response` types, `Timestamp` with flexible unmarshaling, manifest install/update functions for Chrome/Brave/Firefox
+- Depends on: Standard library only
+- Used by: `devlog-host` binary, CLI layer (for `register` and `healthcheck` commands)
 
-**Logging Layer:**
-- `internal/logger/` - Browser console log filtering and formatting
-- Thread-safe file writing with mutex protection
-- Type conversion utilities for JSON-unmarshaled numeric values
+**Logger Layer:**
+- Purpose: Writes formatted, level-filtered browser log messages to append-only files
+- Location: `internal/logger/logger.go`
+- Contains: `Logger` struct with mutex-protected file writes, level filtering
+- Depends on: `internal/natmsg` (for `Message` type)
+- Used by: `devlog-host` binary
 
 **Browser Extension Layer:**
-- Page injection via web_accessible_resources (CSP-safe)
-- Console wrapping via postMessage bridge
-- Content script → background script → native host messaging chain
-
-## Entry Points
-
-**Main CLI Entry Point:**
-- `cmd/devlog/main.go` - CLI application entry
-- Command dispatch via `map[string]Command` registry
-- Commands that need config vs commands that don't
-
-**Native Messaging Host Entry:**
-- `cmd/devlog-host/main.go` - Native messaging host entry
-- Reads log path and levels from command line arguments
-- Continuous message loop until stdin EOF
-
-**Browser Extension Entry Points:**
-- `chrome/page_inject.js` - Injected into page context
-- `content_script.js` - Bridge between page and background
-- Background script handles native messaging
-
-## Key Abstractions
-
-**Command Pattern:**
-```go
-type Command func(cfg *config.Config, args []string) error
-```
-- All commands implement this signature
-- Nil config for commands that don't require YAML config
-
-**Tmux Runner:**
-```go
-type Runner struct {
-    sessionName string
-}
-```
-- Encapsulates all tmux operations
-- Methods for session creation, pane management, log capture
-
-**Native Messaging Protocol:**
-```go
-type Message struct {
-    Type      string      `json:"type"`
-    Level     string      `json:"level"`
-    Message   string      `json:"message"`
-    URL       string      `json:"url"`
-    Timestamp interface{} `json:"timestamp"`  // Flexible for JSON numbers
-    Source    string      `json:"source,omitempty"`
-    Line      interface{} `json:"line,omitempty"`
-    Column    interface{} `json:"column,omitempty"`
-}
-```
+- Purpose: Captures browser console logs from web pages and forwards them to the native host
+- Location: `browser-extension/`
+- Contains: `page_inject.js` (wraps `console.*` methods in page context), `content_script.js` (bridges page → background), `background.js` (manages native messaging port, URL filtering)
+- Depends on: Chrome/Firefox extension APIs, Native Messaging API
+- Used by: Browsers (Chrome, Firefox, Brave)
 
 ## Data Flow
 
-**Session Startup Flow:**
-1. `devlog up` → Load YAML config
-2. Resolve logs directory (create if timestamped mode)
-3. Create tmux session with windows/panes
-4. Set up `pipe-pane` logging for each pane
-5. Generate browser host wrapper script with session-specific log path
-6. Update native messaging manifest to point to wrapper
+**Server Log Capture (tmux pipe-pane):**
+1. User runs `devlog up` → CLI loads `devlog.yml` config
+2. CLI creates tmux session with windows/panes via `tmux.Runner.CreateSession()`
+3. Each pane runs its configured command with `tmux pipe-pane` capturing stdout to a log file
+4. Log files are written to `<logs_dir>/<timestamp>/` (timestamped mode) or `<logs_dir>/` (overwrite mode)
+5. User runs `devlog down` → CLI sends Ctrl+C to all panes, then kills the tmux session
 
-**Browser Log Flow:**
-1. Page script captures console.{log,error,warn,info}
-2. PostMessage to content script with __devlog flag
-3. Content script forwards to background script via chrome.runtime.sendMessage
-4. Background script sends to native host via native messaging
-5. Native host parses JSON, filters by level, writes to log file
+**Browser Log Capture (native messaging):**
+1. `devlog up` generates a shell wrapper script at `~/Library/Caches/devlog/wrappers/devlog-host-wrapper-<session>.sh` that calls `devlog-host` with the correct log path and level filters
+2. The wrapper path is written into the browser's native messaging manifest (`com.devlog.host.json`)
+3. In the browser, `page_inject.js` wraps `console.*` methods and posts messages to `content_script.js` via `window.postMessage`
+4. `content_script.js` forwards matching messages to `background.js` via `chrome.runtime.sendMessage`
+5. `background.js` checks URL patterns, then sends the log message via `chrome.runtime.connectNative` → native messaging port
+6. The browser launches `devlog-host` (via the wrapper), which reads length-prefixed JSON from stdin and writes formatted lines to the log file
+7. `devlog down` restores the original binary path in the native messaging manifest
 
-## State Management
+**State Management:**
+- Session state is stored in tmux itself (session existence, environment variables like `DEVLOG_LOGS_DIR`)
+- No database or persistent state file — the filesystem (log directories) and tmux are the sources of truth
+- Browser extension state is in-memory only (connection status, config)
 
-**Tmux State:**
-- Session stored in tmux server process
-- `DEVLOG_LOGS_DIR` environment variable for cross-command communication
-- Session name used for all tmux commands
+## Key Abstractions
 
-**Browser State:**
-- Extension stores enabled/disabled state and log levels
-- Configuration updates propagate via `CONFIG_UPDATED` messages
+**Command Function Type:**
+- Purpose: Uniform interface for all CLI subcommands
+- Examples: `cmd/devlog/main.go` — `type Command func(cfg *config.Config, args []string) error`
+- Pattern: Function-as-value command dispatch via `map[string]Command`
 
-**Local State:**
-- No persistent state beyond files (YAML config, log files)
-- Each command is stateless (reads from tmux/environment)
+**tmux.Runner:**
+- Purpose: Encapsulates all tmux subprocess interactions for a named session
+- Examples: `internal/tmux/tmux.go`
+- Pattern: Constructor injection (`NewRunner(sessionName)`) with method-based API
 
-## Security Boundaries
+**natmsg.Host:**
+- Purpose: Abstracts Native Messaging wire protocol (stdin/stdout read/write with length prefix)
+- Examples: `internal/natmsg/natmsg.go`
+- Pattern: Stream-based I/O with `NewHostWithStreams()` for testability
 
-**Native Messaging:**
-- Browser restricts which extensions can communicate with which hosts
-- Manifest must explicitly whitelist extension IDs
-- Host binary must be in expected location
+**config.Config:**
+- Purpose: Strongly-typed representation of `devlog.yml` with validation and derived paths
+- Examples: `internal/config/config.go`
+- Pattern: Load → Interpolate → Unmarshal → Default → Validate pipeline
 
-**Shell Command Execution:**
-- All shell-escaped paths prevent command injection
-- Absolute paths stored in environment to avoid path resolution issues
+## Entry Points
+
+**devlog CLI:**
+- Location: `cmd/devlog/main.go`
+- Triggers: User invokes `devlog <command>` from terminal
+- Responsibilities: Parse args, find and load config, dispatch to command handler
+
+**devlog-host:**
+- Location: `cmd/devlog-host/main.go`
+- Triggers: Browser launches it via native messaging when extension connects
+- Responsibilities: Read native messages from stdin, filter by level, write formatted logs to file
+
+**Browser Extension:**
+- Location: `browser-extension/background.js` (entry), `browser-extension/content_script.js`, `browser-extension/page_inject.js`
+- Triggers: Browser loads extension on page navigation
+- Responsibilities: Intercept `console.*` calls, forward to native messaging host
+
+## Error Handling
+**Strategy:** Return errors with context wrapping; log warnings for non-fatal issues
+
+**Patterns:**
+- All internal packages return errors with `fmt.Errorf("context: %w", err)` wrapping
+- CLI commands print errors to stderr and exit with code 1
+- Non-fatal issues (e.g., failed cleanup, failed browser wrapper setup) are logged as warnings and don't abort the command
+- `devlog-host` logs errors to stderr but continues processing (resilient message loop)
+- Browser extension uses `console.error`/`console.warn` for diagnostics; silently ignores errors for tabs without content scripts
+
+## Cross-Cutting Concerns
+
+**Logging:**
+- No structured logging framework — uses `fmt.Printf` for user output and `fmt.Fprintf(os.Stderr, ...)` for errors/warnings
+- Browser logs are formatted as `[TIMESTAMP] [LEVEL] [URL] source:line:column: message`
+
+**Configuration:**
+- Single `devlog.yml` file with upward directory traversal for discovery
+- Environment variable interpolation (`$VAR` / `${VAR}`) before YAML parsing
+- Validation at load time with descriptive error messages
+
+**Security:**
+- Shell command injection prevention via single-quote escaping (`shellQuote()`)
+- Tmux `pipe-pane` paths are escaped
+- Native messaging message size capped at 10MB
+- Browser extension uses `web_accessible_resources` for page injection (avoids CSP issues)
+
+**Cross-Platform:**
+- Native messaging manifest paths handled per-OS (macOS, Linux, Windows)
+- File manager opening uses platform-appropriate commands (`open`, `xdg-open`, `cmd /c start`)
+- Supports Chrome, Brave, Firefox, and Zen browser
 
 ---
-
-*Architecture analysis: 2026-02-10*
+*Architecture analysis: 2026-02-23*

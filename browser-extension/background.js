@@ -71,7 +71,10 @@ function sendToNativeHost(message) {
 	if (!isNativeHostConnected || !nativePort) {
 		// Try to reconnect if not connected
 		if (!connectToNativeHost()) {
-			console.warn("devlog: Cannot send log - native host not connected");
+			console.warn(
+				"devlog: Cannot send log - native host not connected. " +
+					"Make sure to run 'devlog up' first to start the logging session.",
+			);
 			return false;
 		}
 	}
@@ -85,7 +88,14 @@ function sendToNativeHost(message) {
 			error.message || error,
 		);
 		if (chrome.runtime.lastError) {
-			console.error("devlog: Runtime error:", chrome.runtime.lastError.message);
+			const errorMsg = chrome.runtime.lastError.message || "";
+			console.error("devlog: Runtime error:", errorMsg);
+			if (errorMsg.includes("has exited")) {
+				console.error(
+					"devlog: The native host process has exited. " +
+						"Make sure 'devlog up' is running and the native messaging host is registered.",
+				);
+			}
 		}
 		isNativeHostConnected = false;
 		return false;
@@ -190,12 +200,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 	return false;
 });
 
-// Initialize connection on startup if enabled (deferred to avoid blocking script load)
-setTimeout(() => {
-	if (config.enabled) {
-		connectToNativeHost();
-	}
-}, 100);
+// Note: We don't auto-connect on startup because:
+// 1. The native host needs a log file path from devlog CLI
+// 2. The user should run `devlog up` first to start logging sessions
+// 3. Connection will be attempted when first log message is sent
 
 // Listen for browser action click (Chrome Manifest V3)
 if (chrome.action) {

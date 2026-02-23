@@ -22,10 +22,7 @@
 				{ type: "GET_CONFIG", url: currentUrl },
 				(response) => {
 					if (chrome.runtime.lastError) {
-						debug(
-							"GET_CONFIG failed:",
-							chrome.runtime.lastError.message,
-						);
+						debug("GET_CONFIG failed:", chrome.runtime.lastError.message);
 						return;
 					}
 					if (response) {
@@ -64,12 +61,16 @@
 	// Listen for messages from injected page script
 	window.addEventListener("message", (event) => {
 		if (event.source !== window || !event.data || !event.data.__devlog) return;
-		if (!isLoggingEnabled) return;
+		console.log("devlog content: Received postMessage", event.data);
+		if (!isLoggingEnabled) {
+			console.log("devlog content: Logging not enabled for this URL");
+			return;
+		}
 		if (!logLevels.includes(event.data.level)) return;
 
 		let source = "inline";
-		let line = "0";
-		let column = "0";
+		let line = 0;
+		let column = 0;
 
 		if (event.data.stack) {
 			const match = event.data.stack.match(
@@ -77,12 +78,17 @@
 			);
 			if (match) {
 				source = match[1] || match[4] || "inline";
-				line = match[2] || match[5] || "0";
-				column = match[3] || match[6] || "0";
+				line = Number.parseInt(match[2] || match[5] || "0", 10) || 0;
+				column = Number.parseInt(match[3] || match[6] || "0", 10) || 0;
 			}
 		}
 
 		try {
+			console.log(
+				"devlog content: Sending LOG to background:",
+				event.data.level,
+				event.data.message,
+			);
 			chrome.runtime.sendMessage(
 				{
 					type: "LOG",
@@ -94,17 +100,18 @@
 					message: event.data.message,
 					timestamp: event.data.timestamp,
 				},
-				() => {
+				(response) => {
+					console.log("devlog content: LOG response:", response);
 					if (chrome.runtime.lastError) {
-						debug(
-							"LOG message failed:",
+						console.error(
+							"devlog content: LOG message failed:",
 							chrome.runtime.lastError.message,
 						);
 					}
 				},
 			);
 		} catch (e) {
-			debug("LOG message threw:", e);
+			console.error("devlog content: LOG message threw:", e);
 		}
 	});
 

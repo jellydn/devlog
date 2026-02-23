@@ -33,7 +33,7 @@ cp "$FIREFOX_DIR/manifest.json" "$BUILD_DIR/"
 # Copy Firefox-specific files
 cp "$FIREFOX_DIR/background.js" "$BUILD_DIR/"
 cp "$FIREFOX_DIR/content_script.js" "$BUILD_DIR/"
-cp "$FIREFOX_DIR/page_inject.js" "$BUILD_DIR/"
+cp "$EXTENSION_DIR/page_inject.js" "$BUILD_DIR/"
 cp "$FIREFOX_DIR/popup.html" "$BUILD_DIR/"
 cp "$FIREFOX_DIR/popup.js" "$BUILD_DIR/"
 

@@ -67,11 +67,14 @@ browser:
 
 ## How It Works
 
-1. **Content Script** (`content_script.js`) is injected into matching web pages
-2. **Page Inject** (`page_inject.js`) runs in the page context to capture console output
-3. **Background Script** (`background.js`) receives logs via `window.postMessage`
-4. **Native Messaging** sends logs to `devlog-host` binary
-5. **devlog-host** writes logs to local files
+1. **Start devlog**: Run `devlog up` to start the logging session
+2. **Content Script** (`content_script.js`) is injected into matching web pages
+3. **Page Inject** (`page_inject.js`) runs in the page context to capture console output
+4. **Background Script** (`background.js`) receives logs via `window.postMessage`
+5. **Native Messaging** sends logs to `devlog-host` binary
+6. **devlog-host** writes logs to local files
+
+> **Important**: You must run `devlog up` first before the extension can capture logs. The native messaging host is started by the devlog CLI.
 
 ## Development
 
@@ -90,6 +93,7 @@ rsvg-convert -w 128 -h 128 icon.svg -o icon128.png
 ### Packaging for Stores
 
 Package for Chrome Web Store:
+
 ```bash
 just package-chrome
 # or
@@ -97,6 +101,7 @@ just package-chrome
 ```
 
 Package for Firefox Add-ons:
+
 ```bash
 just package-firefox
 # or
@@ -104,6 +109,7 @@ just package-firefox
 ```
 
 Package both:
+
 ```bash
 just package-extensions
 ```
@@ -118,11 +124,13 @@ After making changes to shared files (background.js, content_script.js, etc.):
 ### Debugging
 
 **Chrome DevTools**:
+
 - Background script: Click "service worker" link in `chrome://extensions/`
 - Content script: Right-click page → Inspect → Console tab → Select content script from dropdown
 - Popup: Right-click extension icon → Inspect popup
 
 **Firefox DevTools**:
+
 - Background script: `about:debugging` → This Firefox → Inspect
 - Content script: Regular page inspector, content script shows in debugger
 - Popup: Right-click extension icon → Inspect popup
@@ -188,16 +196,61 @@ See [PRIVACY.md](../PRIVACY.md) for details on data handling.
 
 ## Troubleshooting
 
+### Native Messaging Host Not Connected
+
+If you see the error:
+
+> "Access to the specified native messaging host is forbidden"
+
+This means the extension needs to be registered with your specific extension ID.
+
+**For Chrome/Brave/Edge (Development):**
+
+1. Go to `chrome://extensions/`
+2. Enable "Developer mode" (top right)
+3. Copy your 32-character extension ID (e.g., `abcdefghijklmnopqrstuvwxyz123456`)
+4. Register the native host:
+   ```bash
+   devlog register --chrome --extension-id <YOUR_EXTENSION_ID>
+   ```
+5. Restart Chrome
+
+**For Chrome Web Store (Production):**
+
+1. Get your extension ID from the Chrome Web Store dashboard
+2. Register with that ID:
+   ```bash
+   devlog register --chrome --extension-id <STORE_EXTENSION_ID>
+   ```
+3. Restart Chrome
+
+**For Firefox:**
+
+1. Run:
+   ```bash
+   devlog register --firefox
+   ```
+2. Restart Firefox
+
 ### Extension not capturing logs
 
 1. **Check native host registration**:
+
    ```bash
    devlog healthcheck
    ```
 
 2. **Verify URL patterns** in devlog.yml match the page you're testing
 
-3. **Check browser console** for extension errors
+3. **Check browser console** for extension errors:
+   - Chrome: `chrome://extensions/` → Click "service worker" → Console
+   - Firefox: `about:debugging` → This Firefox → Inspect
+
+4. **Verify native messaging is working**:
+   ```bash
+   # Test native messaging directly
+   echo '{"test": true}' | devlog-host ./test.log
+   ```
 
 ### Native messaging errors
 
@@ -206,13 +259,36 @@ See [PRIVACY.md](../PRIVACY.md) for details on data handling.
   - Verify `devlog-host` binary is in your PATH
 
 - **Error: "Native host has exited"**
-  - Check devlog-host logs
-  - Ensure devlog CLI is running (`devlog up`)
+  - This means the native messaging connection was established but the host process exited
+  - Make sure `devlog up` is running to start the logging session
+  - The native host needs the devlog CLI to be running to provide the log file path
+  - Verify: Run `devlog status` to check if a session is active
+
+- **Error: "Access to the specified native messaging host is forbidden"**
+  - The extension ID doesn't match what's registered
+  - See "Native Messaging Host Not Connected" section above
 
 ### Popup shows "disabled"
 
 - Start devlog session: `devlog up`
 - Check that browser.native_host is true in devlog.yml
+- See "Native Messaging Host Not Connected" section above
+
+### Register Command Options
+
+```bash
+# Register for Chrome with extension ID
+devlog register --chrome --extension-id abcdefghijklmnopqrstuvwxyz123456
+
+# Register for Brave with extension ID
+devlog register --brave --extension-id abcdefghijklmnopqrstuvwxyz123456
+
+# Register for Firefox
+devlog register --firefox
+
+# Register for multiple browsers
+devlog register --chrome --brave --extension-id abcdefghijklmnopqrstuvwxyz123456
+```
 
 ## Contributing
 

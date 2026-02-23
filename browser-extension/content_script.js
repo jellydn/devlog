@@ -68,8 +68,8 @@
 		if (!logLevels.includes(event.data.level)) return;
 
 		let source = "inline";
-		let line = "0";
-		let column = "0";
+		let line = 0;
+		let column = 0;
 
 		if (event.data.stack) {
 			const match = event.data.stack.match(
@@ -77,8 +77,8 @@
 			);
 			if (match) {
 				source = match[1] || match[4] || "inline";
-				line = match[2] || match[5] || "0";
-				column = match[3] || match[6] || "0";
+				line = Number.parseInt(match[2] || match[5] || "0", 10) || 0;
+				column = Number.parseInt(match[3] || match[6] || "0", 10) || 0;
 			}
 		}
 

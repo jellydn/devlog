@@ -341,6 +341,22 @@ func TestMessage_LineColumn_Present(t *testing.T) {
 	}
 }
 
+func TestMessage_LineColumn_StringValues(t *testing.T) {
+	jsonData := `{"type":"console","level":"log","message":"test","url":"http://example.com","timestamp":1697371845123,"line":"42","column":"10"}`
+
+	var msg Message
+	if err := json.Unmarshal([]byte(jsonData), &msg); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if msg.Line == nil || *msg.Line != 42 {
+		t.Errorf("Line = %v, want 42", msg.Line)
+	}
+	if msg.Column == nil || *msg.Column != 10 {
+		t.Errorf("Column = %v, want 10", msg.Column)
+	}
+}
+
 func mustParseTime(t *testing.T, s string) time.Time {
 	t.Helper()
 	ts, err := time.Parse(time.RFC3339Nano, s)

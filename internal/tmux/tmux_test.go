@@ -3,6 +3,7 @@ package tmux
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -251,5 +252,38 @@ func TestCheckVersion(t *testing.T) {
 	// Version should start with "tmux "
 	if !strings.HasPrefix(version, "tmux ") {
 		t.Errorf("CheckVersion() = %q, want version starting with 'tmux '", version)
+	}
+}
+
+func TestEnsurePaneLogFiles(t *testing.T) {
+	logsDir := t.TempDir()
+	windows := []WindowConfig{
+		{
+			Name: "main",
+			Panes: []PaneConfig{
+				{Cmd: "echo test", Log: "web.log"},
+				{Cmd: "echo test", Log: "nested/api.log"},
+				{Cmd: "echo test", Log: "nested/api.log"},
+				{Cmd: "echo test", Log: ""},
+			},
+		},
+	}
+
+	if err := ensurePaneLogFiles(logsDir, windows); err != nil {
+		t.Fatalf("ensurePaneLogFiles() failed: %v", err)
+	}
+
+	logPaths := []string{
+		filepath.Join(logsDir, "web.log"),
+		filepath.Join(logsDir, "nested", "api.log"),
+	}
+	for _, logPath := range logPaths {
+		info, err := os.Stat(logPath)
+		if err != nil {
+			t.Fatalf("expected log file to exist (%s): %v", logPath, err)
+		}
+		if info.Size() != 0 {
+			t.Errorf("expected empty pre-created log file (%s), got size=%d", logPath, info.Size())
+		}
 	}
 }

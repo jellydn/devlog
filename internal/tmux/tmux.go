@@ -36,6 +36,9 @@ func (r *Runner) CreateSession(logsDir string, windows []WindowConfig) error {
 	if err := os.MkdirAll(logsDir, 0755); err != nil {
 		return fmt.Errorf("failed to create logs directory: %w", err)
 	}
+	if err := ensurePaneLogFiles(logsDir, windows); err != nil {
+		return err
+	}
 
 	if len(windows) == 0 || len(windows[0].Panes) == 0 {
 		return fmt.Errorf("at least one window with one pane is required")
@@ -80,6 +83,37 @@ func (r *Runner) CreateSession(logsDir string, windows []WindowConfig) error {
 		}
 	}
 
+	return nil
+}
+
+func ensurePaneLogFiles(logsDir string, windows []WindowConfig) error {
+	seen := make(map[string]struct{})
+	for _, window := range windows {
+		for _, pane := range window.Panes {
+			if pane.Log == "" {
+				continue
+			}
+
+			logPath := filepath.Join(logsDir, pane.Log)
+			if _, ok := seen[logPath]; ok {
+				continue
+			}
+			seen[logPath] = struct{}{}
+
+			logDir := filepath.Dir(logPath)
+			if err := os.MkdirAll(logDir, 0755); err != nil {
+				return fmt.Errorf("failed to create log directory '%s': %w", logDir, err)
+			}
+
+			f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+			if err != nil {
+				return fmt.Errorf("failed to create log file '%s': %w", logPath, err)
+			}
+			if err := f.Close(); err != nil {
+				return fmt.Errorf("failed to close log file '%s': %w", logPath, err)
+			}
+		}
+	}
 	return nil
 }
 
@@ -136,7 +170,11 @@ func (r *Runner) sendCommandWithLogging(target, command, logsDir, logFile string
 		}
 	}
 
-	cmd := exec.Command("tmux", "send-keys", "-t", target, command, "C-m")
+	// Run pane commands through POSIX sh so bash-style syntax works even when the
+	// user's interactive shell is fish/zsh.
+	escapedCommand := "'" + strings.ReplaceAll(command, "'", "'\\''") + "'"
+	shCommand := fmt.Sprintf("sh -lc %s", escapedCommand)
+	cmd := exec.Command("tmux", "send-keys", "-t", target, shCommand, "C-m")
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to send command: %w", err)
 	}

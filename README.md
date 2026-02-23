@@ -40,7 +40,11 @@ go install github.com/jellydn/devlog/cmd/devlog@latest
 go install github.com/jellydn/devlog/cmd/devlog-host@latest
 ```
 
-### Browser Extension (manual)
+### Browser Extension
+
+> **Coming Soon**: The extension will be available on Chrome Web Store and Firefox Add-ons for easy one-click installation.
+
+For now, load the extension manually:
 
 #### Chrome
 
@@ -65,6 +69,21 @@ go install github.com/jellydn/devlog/cmd/devlog-host@latest
 3. Click "Load unpacked"
 4. Select the `browser-extension/chrome` directory (Brave uses Chrome extensions)
 5. The extension icon should appear in your toolbar
+
+#### Native Messaging Registration
+
+After loading the extension, you must register the native messaging host with your extension ID:
+
+```bash
+# For Chrome/Brave/Edge - replace <EXTENSION_ID> with your extension ID
+# Get it from chrome://extensions/ when Developer mode is enabled
+devlog register --chrome --extension-id <EXTENSION_ID>
+
+# For Firefox
+devlog register --firefox
+```
+
+**Troubleshooting**: If you see "Access to the specified native messaging host is forbidden" error, see the [Browser Extension Troubleshooting Guide](browser-extension/README.md#troubleshooting).
 
 ## Quick Start
 
@@ -109,17 +128,17 @@ devlog up
 
 ## CLI
 
-| Command            | Description                          |
-| ------------------ | ------------------------------------ |
-| `devlog init`      | Create devlog.yml template           |
-| `devlog healthcheck` | Check system requirements          |
-| `devlog up`        | Start tmux session + browser logging |
-| `devlog down`      | Stop session, flush logs             |
-| `devlog attach`    | Attach to the running tmux session   |
-| `devlog status`    | Show session state + log paths       |
-| `devlog ls`        | List log runs                        |
-| `devlog open`      | Open logs directory in file manager  |
-| `devlog register`  | Register native messaging host (Chrome, Brave, Firefox) |
+| Command              | Description                                             |
+| -------------------- | ------------------------------------------------------- |
+| `devlog init`        | Create devlog.yml template                              |
+| `devlog healthcheck` | Check system requirements                               |
+| `devlog up`          | Start tmux session + browser logging                    |
+| `devlog down`        | Stop session, flush logs                                |
+| `devlog attach`      | Attach to the running tmux session                      |
+| `devlog status`      | Show session state + log paths                          |
+| `devlog ls`          | List log runs                                           |
+| `devlog open`        | Open logs directory in file manager                     |
+| `devlog register`    | Register native messaging host (Chrome, Brave, Firefox) |
 
 `devlog up` will error if a session is already running. Use `devlog down` first.
 
@@ -198,11 +217,19 @@ devlog healthcheck
 ```
 
 The healthcheck command verifies:
+
 - tmux is installed and accessible
 - devlog-host binary is available
 - Browser extension is registered (Chrome, Brave, or Firefox)
 
 If any checks fail, the command provides instructions on how to fix them.
+
+## Contributing
+
+Contributions are welcome! Please see:
+
+- [Browser Extension Store Submission Guide](doc/STORE_SUBMISSION.md) - For publishing to Chrome Web Store and Firefox Add-ons
+- [Screenshots Guide](doc/SCREENSHOTS.md) - For creating store submission screenshots
 
 ## License
 

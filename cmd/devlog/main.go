@@ -281,6 +281,9 @@ func cmdUp(cfg *config.Config, args []string) error {
 	// Set up browser logging wrapper if configured
 	if len(cfg.Browser.URLs) > 0 && cfg.Browser.File != "" {
 		browserLogPath := filepath.Join(logsDir, cfg.Browser.File)
+		if err := ensureFileExists(browserLogPath); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to prepare browser log file: %v\n", err)
+		}
 		if err := writeBrowserHostWrapper(cfg.Tmux.Session, browserLogPath, cfg.Browser.Levels); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to set up browser logging wrapper: %v\n", err)
 		} else {
@@ -347,10 +350,7 @@ func cmdStatus(cfg *config.Config, args []string) error {
 	}
 
 	// Resolve logs directory from the running session
-	logsDir := runner.GetLogsDir()
-	if logsDir == "" {
-		logsDir = cfg.ResolveLogsDir()
-	}
+	logsDir := resolveStatusLogsDir(runner.GetLogsDir(), cfg)
 	fmt.Printf("Logs directory: %s\n", logsDir)
 
 	// Get session info
@@ -463,6 +463,59 @@ func countFiles(dir string) int {
 		}
 	}
 	return count
+}
+
+func resolveStatusLogsDir(runningLogsDir string, cfg *config.Config) string {
+	if runningLogsDir != "" {
+		return runningLogsDir
+	}
+	if cfg.RunMode != "timestamped" {
+		return cfg.LogsDir
+	}
+	latestRun := latestRunDir(cfg.LogsDir)
+	if latestRun != "" {
+		return latestRun
+	}
+	return cfg.LogsDir
+}
+
+func latestRunDir(baseLogsDir string) string {
+	entries, err := os.ReadDir(baseLogsDir)
+	if err != nil {
+		return ""
+	}
+
+	latestName := ""
+	latestModTime := int64(-1)
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().UnixNano() > latestModTime {
+			latestModTime = info.ModTime().UnixNano()
+			latestName = entry.Name()
+		}
+	}
+
+	if latestName == "" {
+		return ""
+	}
+	return filepath.Join(baseLogsDir, latestName)
+}
+
+func ensureFileExists(path string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	return f.Close()
 }
 
 func cmdOpen(cfg *config.Config, args []string) error {
@@ -578,13 +631,21 @@ Examples:
 
 	if installFirefox {
 		fmt.Printf("Registering for Firefox...\n")
-		if err := natmsg.InstallFirefoxManifest(hostPath); err != nil {
+		// Use extension ID if provided, otherwise use default
+		firefoxExtID := extensionID
+		if firefoxExtID == "" {
+			firefoxExtID = "devlog@devlog.local"
+		}
+		if err := natmsg.InstallFirefoxManifestWithID(hostPath, firefoxExtID); err != nil {
 			return fmt.Errorf("failed to register Firefox manifest: %w", err)
 		}
 		dirs := natmsg.GetFirefoxNativeMessagingDirs()
 		fmt.Printf("  Installed to:\n")
 		for _, dir := range dirs {
 			fmt.Printf("    - %s\n", dir)
+		}
+		if extensionID != "" {
+			fmt.Printf("  Extension ID: %s\n", extensionID)
 		}
 	}
 

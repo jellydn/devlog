@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -63,6 +65,71 @@ type Message struct {
 	Source    string    `json:"source,omitempty"`
 	Line      *int      `json:"line,omitempty"`
 	Column    *int      `json:"column,omitempty"`
+}
+
+// UnmarshalJSON accepts line/column as either numbers or numeric strings.
+func (m *Message) UnmarshalJSON(b []byte) error {
+	type wireMessage struct {
+		Type      string          `json:"type"`
+		Level     string          `json:"level"`
+		Message   string          `json:"message"`
+		URL       string          `json:"url"`
+		Timestamp Timestamp       `json:"timestamp"`
+		Source    string          `json:"source,omitempty"`
+		Line      json.RawMessage `json:"line,omitempty"`
+		Column    json.RawMessage `json:"column,omitempty"`
+	}
+
+	var wire wireMessage
+	if err := json.Unmarshal(b, &wire); err != nil {
+		return err
+	}
+
+	line, err := parseOptionalInt(wire.Line)
+	if err != nil {
+		return fmt.Errorf("invalid line: %w", err)
+	}
+	column, err := parseOptionalInt(wire.Column)
+	if err != nil {
+		return fmt.Errorf("invalid column: %w", err)
+	}
+
+	m.Type = wire.Type
+	m.Level = wire.Level
+	m.Message = wire.Message
+	m.URL = wire.URL
+	m.Timestamp = wire.Timestamp
+	m.Source = wire.Source
+	m.Line = line
+	m.Column = column
+
+	return nil
+}
+
+func parseOptionalInt(raw json.RawMessage) (*int, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
+	}
+
+	var n int
+	if err := json.Unmarshal(raw, &n); err == nil {
+		return &n, nil
+	}
+
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return nil, nil
+		}
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			return nil, fmt.Errorf("must be an integer value")
+		}
+		return &n, nil
+	}
+
+	return nil, fmt.Errorf("must be a number or numeric string")
 }
 
 // Response represents a response message sent back to the browser

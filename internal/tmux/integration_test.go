@@ -588,3 +588,42 @@ func TestTmuxIntegration_PaneCommands(t *testing.T) {
 		}
 	}
 }
+
+// TestTmuxIntegration_PosixCommandSyntax verifies commands are executed via sh.
+func TestTmuxIntegration_PosixCommandSyntax(t *testing.T) {
+	skipIfNoTmux(t)
+
+	sessionName := generateTestSessionName()
+	runner := NewRunner(sessionName)
+
+	defer func() {
+		if runner.SessionExists() {
+			runner.KillSession()
+		}
+	}()
+
+	tmpDir := t.TempDir()
+	logFile := "posix.log"
+	windows := []WindowConfig{
+		{
+			Name: "test",
+			Panes: []PaneConfig{
+				{Cmd: "(echo posix-syntax-works) | cat", Log: logFile},
+			},
+		},
+	}
+
+	if err := runner.CreateSession(tmpDir, windows); err != nil {
+		t.Fatalf("CreateSession failed: %v", err)
+	}
+
+	time.Sleep(300 * time.Millisecond)
+
+	content, err := os.ReadFile(filepath.Join(tmpDir, logFile))
+	if err != nil {
+		t.Fatalf("failed to read log file: %v", err)
+	}
+	if !strings.Contains(string(content), "posix-syntax-works") {
+		t.Errorf("expected posix command output in log, got: %q", string(content))
+	}
+}

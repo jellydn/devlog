@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // Runner handles tmux session operations
@@ -200,8 +201,9 @@ func (r *Runner) KillSession() error {
 		cmd.Run() // Ignore errors - pane might not have a process
 	}
 
-	// Wait briefly for processes to terminate
-	exec.Command("tmux", "send-keys", "-t", r.sessionName, "sleep 0.5", "C-m").Run()
+	// Wait in the Go process so the grace period is deterministic.
+	// (send-keys "sleep 0.5" runs inside a pane shell and does not block KillSession.)
+	time.Sleep(500 * time.Millisecond)
 
 	// Force kill any remaining processes with C-c again
 	for _, paneID := range paneIDs {

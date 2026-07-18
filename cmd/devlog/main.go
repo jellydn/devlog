@@ -254,29 +254,13 @@ func cmdUp(cfg *config.Config, args []string) error {
 		fmt.Fprintf(os.Stderr, "Warning: failed to cleanup old runs: %v\n", err)
 	}
 
-	// Convert config windows to tmux windows
-	windows := make([]tmux.WindowConfig, len(cfg.Tmux.Windows))
-	for i, w := range cfg.Tmux.Windows {
-		panes := make([]tmux.PaneConfig, len(w.Panes))
-		for j, p := range w.Panes {
-			panes[j] = tmux.PaneConfig{
-				Cmd: p.Cmd,
-				Log: p.Log,
-			}
-		}
-		windows[i] = tmux.WindowConfig{
-			Name:  w.Name,
-			Panes: panes,
-		}
-	}
-
 	// Create the tmux session
 	logsDir := cfg.ResolveLogsDir()
-	if err := runner.CreateSession(logsDir, windows); err != nil {
+	if err := runner.CreateSession(logsDir, cfg.Tmux.Windows); err != nil {
 		return fmt.Errorf("failed to create tmux session: %w", err)
 	}
 
-	fmt.Printf("Created tmux session '%s' with %d window(s)\n", cfg.Tmux.Session, len(windows))
+	fmt.Printf("Created tmux session '%s' with %d window(s)\n", cfg.Tmux.Session, len(cfg.Tmux.Windows))
 
 	// Set up browser logging wrapper if configured
 	if len(cfg.Browser.URLs) > 0 && cfg.Browser.File != "" {

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jellydn/devlog/internal/config"
 )
 
 // skipIfNoTmux skips the test if tmux is not available
@@ -44,10 +46,10 @@ func TestTmuxIntegration_CreateSession(t *testing.T) {
 	}()
 
 	// Test session creation
-	windows := []WindowConfig{
+	windows := []config.WindowConfig{
 		{
 			Name: "test",
-			Panes: []PaneConfig{
+			Panes: []config.PaneConfig{
 				{Cmd: "echo 'test'", Log: "test.log"},
 			},
 		},
@@ -87,24 +89,24 @@ func TestTmuxIntegration_MultipleWindowsAndPanes(t *testing.T) {
 	}()
 
 	tmpDir := t.TempDir()
-	windows := []WindowConfig{
+	windows := []config.WindowConfig{
 		{
 			Name: "main",
-			Panes: []PaneConfig{
+			Panes: []config.PaneConfig{
 				{Cmd: "echo 'pane 1'", Log: "pane1.log"},
 				{Cmd: "echo 'pane 2'", Log: "pane2.log"},
 			},
 		},
 		{
 			Name: "secondary",
-			Panes: []PaneConfig{
+			Panes: []config.PaneConfig{
 				{Cmd: "echo 'pane 3'", Log: "pane3.log"},
 				{Cmd: "echo 'pane 4'", Log: "pane4.log"},
 			},
 		},
 		{
 			Name: "tertiary",
-			Panes: []PaneConfig{
+			Panes: []config.PaneConfig{
 				{Cmd: "echo 'pane 5'", Log: "pane5.log"},
 			},
 		},
@@ -175,10 +177,10 @@ func TestTmuxIntegration_LogCapture(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	testMessage := "integration-test-message"
-	windows := []WindowConfig{
+	windows := []config.WindowConfig{
 		{
 			Name: "test",
-			Panes: []PaneConfig{
+			Panes: []config.PaneConfig{
 				{Cmd: fmt.Sprintf("echo %s", testMessage), Log: "capture.log"},
 			},
 		},
@@ -217,10 +219,10 @@ func TestTmuxIntegration_SessionLifecycle(t *testing.T) {
 	}
 
 	tmpDir := t.TempDir()
-	windows := []WindowConfig{
+	windows := []config.WindowConfig{
 		{
 			Name: "test",
-			Panes: []PaneConfig{
+			Panes: []config.PaneConfig{
 				{Cmd: "echo test", Log: "test.log"},
 			},
 		},
@@ -277,10 +279,10 @@ func TestTmuxIntegration_DuplicateSession(t *testing.T) {
 	}()
 
 	tmpDir := t.TempDir()
-	windows := []WindowConfig{
+	windows := []config.WindowConfig{
 		{
 			Name: "test",
-			Panes: []PaneConfig{
+			Panes: []config.PaneConfig{
 				{Cmd: "echo test", Log: "test.log"},
 			},
 		},
@@ -330,10 +332,10 @@ func TestTmuxIntegration_SpecialCharactersInPaths(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			windows := []WindowConfig{
+			windows := []config.WindowConfig{
 				{
 					Name: "test",
-					Panes: []PaneConfig{
+					Panes: []config.PaneConfig{
 						{Cmd: "echo test", Log: tc.logFile},
 					},
 				},
@@ -378,10 +380,10 @@ func TestTmuxIntegration_EmptyLogFile(t *testing.T) {
 	}()
 
 	tmpDir := t.TempDir()
-	windows := []WindowConfig{
+	windows := []config.WindowConfig{
 		{
 			Name: "test",
-			Panes: []PaneConfig{
+			Panes: []config.PaneConfig{
 				{Cmd: "echo 'logged'", Log: "with-log.log"},
 				{Cmd: "echo 'not logged'", Log: ""}, // No log file
 			},
@@ -421,10 +423,10 @@ func TestTmuxIntegration_GetLogsDir(t *testing.T) {
 	}()
 
 	tmpDir := t.TempDir()
-	windows := []WindowConfig{
+	windows := []config.WindowConfig{
 		{
 			Name: "test",
-			Panes: []PaneConfig{
+			Panes: []config.PaneConfig{
 				{Cmd: "echo test", Log: "test.log"},
 			},
 		},
@@ -467,10 +469,10 @@ func TestTmuxIntegration_MultiplePanesSameLogFile(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	sharedLog := "shared.log"
-	windows := []WindowConfig{
+	windows := []config.WindowConfig{
 		{
 			Name: "test",
-			Panes: []PaneConfig{
+			Panes: []config.PaneConfig{
 				{Cmd: "echo 'message-from-pane-1'", Log: sharedLog},
 				{Cmd: "echo 'message-from-pane-2'", Log: sharedLog},
 			},
@@ -516,10 +518,10 @@ func TestTmuxIntegration_LongSessionName(t *testing.T) {
 	}()
 
 	tmpDir := t.TempDir()
-	windows := []WindowConfig{
+	windows := []config.WindowConfig{
 		{
 			Name: "test",
-			Panes: []PaneConfig{
+			Panes: []config.PaneConfig{
 				{Cmd: "echo test", Log: "test.log"},
 			},
 		},
@@ -557,10 +559,10 @@ func TestTmuxIntegration_PaneCommands(t *testing.T) {
 	}()
 
 	tmpDir := t.TempDir()
-	windows := []WindowConfig{
+	windows := []config.WindowConfig{
 		{
 			Name: "test",
-			Panes: []PaneConfig{
+			Panes: []config.PaneConfig{
 				{Cmd: "echo hello", Log: "echo.log"},
 				{Cmd: "date", Log: "date.log"},
 				{Cmd: "pwd", Log: "pwd.log"},
@@ -604,10 +606,10 @@ func TestTmuxIntegration_PosixCommandSyntax(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	logFile := "posix.log"
-	windows := []WindowConfig{
+	windows := []config.WindowConfig{
 		{
 			Name: "test",
-			Panes: []PaneConfig{
+			Panes: []config.PaneConfig{
 				{Cmd: "(echo posix-syntax-works) | cat", Log: logFile},
 			},
 		},

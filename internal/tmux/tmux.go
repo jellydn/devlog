@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jellydn/devlog/internal/config"
+	"github.com/jellydn/devlog/internal/shellescape"
 )
 
 // Runner handles tmux session operations
@@ -165,8 +166,7 @@ func (r *Runner) sendCommandWithLogging(target, command, logsDir, logFile string
 		logPath := filepath.Join(logsDir, logFile)
 
 		// Quote the path to prevent command injection
-		escapedPath := "'" + strings.ReplaceAll(logPath, "'", "'\\''") + "'"
-		pipeCmd := fmt.Sprintf("cat >> %s", escapedPath)
+		pipeCmd := fmt.Sprintf("cat >> %s", shellescape.Quote(logPath))
 		cmd := exec.Command("tmux", "pipe-pane", "-t", target, "-o", pipeCmd)
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("failed to set up pipe-pane logging: %w", err)
@@ -175,8 +175,7 @@ func (r *Runner) sendCommandWithLogging(target, command, logsDir, logFile string
 
 	// Run pane commands through POSIX sh so bash-style syntax works even when the
 	// user's interactive shell is fish/zsh.
-	escapedCommand := "'" + strings.ReplaceAll(command, "'", "'\\''") + "'"
-	shCommand := fmt.Sprintf("sh -lc %s", escapedCommand)
+	shCommand := fmt.Sprintf("sh -lc %s", shellescape.Quote(command))
 	cmd := exec.Command("tmux", "send-keys", "-t", target, shCommand, "C-m")
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to send command: %w", err)

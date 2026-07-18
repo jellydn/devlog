@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/jellydn/devlog/internal/natmsg"
@@ -44,6 +45,13 @@ func ensureFileExists(path string) error {
 	return f.Close()
 }
 
+func browserHostWrapperExt() string {
+	if runtime.GOOS == "windows" {
+		return ".bat"
+	}
+	return ".sh"
+}
+
 func browserHostWrapperPath(session string) string {
 	cacheDir, err := os.UserCacheDir()
 	if err != nil {
@@ -53,7 +61,7 @@ func browserHostWrapperPath(session string) string {
 		cacheDir,
 		"devlog",
 		"wrappers",
-		fmt.Sprintf("devlog-host-wrapper-%s.sh", sanitizeSessionForFileName(session)),
+		fmt.Sprintf("devlog-host-wrapper-%s%s", sanitizeSessionForFileName(session), browserHostWrapperExt()),
 	)
 }
 
@@ -98,14 +106,12 @@ func writeBrowserHostWrapper(session string, browserLogPath string, levels []str
 		return err
 	}
 
-	// Build script with proper shell escaping using positional parameters
-	// Use "$@" to safely pass arguments without re-parsing by the shell
-	var scriptArgs []string
-	scriptArgs = append(scriptArgs, shellQuote(hostPath), shellQuote(absLogPath))
-	for _, level := range levels {
-		scriptArgs = append(scriptArgs, shellQuote(level))
+	var script string
+	if runtime.GOOS == "windows" {
+		script = generateBatchScript(hostPath, absLogPath, levels)
+	} else {
+		script = generateShellScript(hostPath, absLogPath, levels)
 	}
-	script := fmt.Sprintf("#!/bin/sh\nexec %s\n", strings.Join(scriptArgs, " "))
 	if err := os.WriteFile(wrapperPath, []byte(script), 0755); err != nil {
 		return err
 	}
@@ -115,6 +121,26 @@ func writeBrowserHostWrapper(session string, browserLogPath string, levels []str
 	}
 
 	return nil
+}
+
+func generateShellScript(hostPath, absLogPath string, levels []string) string {
+	// Build script with proper shell escaping. exec replaces the shell with the host.
+	var scriptArgs []string
+	scriptArgs = append(scriptArgs, shellQuote(hostPath), shellQuote(absLogPath))
+	for _, level := range levels {
+		scriptArgs = append(scriptArgs, shellQuote(level))
+	}
+	return fmt.Sprintf("#!/bin/sh\nexec %s\n", strings.Join(scriptArgs, " "))
+}
+
+func generateBatchScript(hostPath, absLogPath string, levels []string) string {
+	// Native messaging on Windows can invoke a .bat host wrapper.
+	var scriptArgs []string
+	scriptArgs = append(scriptArgs, batchQuote(hostPath), batchQuote(absLogPath))
+	for _, level := range levels {
+		scriptArgs = append(scriptArgs, batchQuote(level))
+	}
+	return "@echo off\r\n" + strings.Join(scriptArgs, " ") + "\r\n"
 }
 
 func restoreBrowserHostWrapper(session string) {
@@ -133,7 +159,7 @@ func restoreBrowserHostWrapper(session string) {
 }
 
 // shellQuote returns a shell-escaped version of the string using single quotes.
-// Any single quotes in the input are escaped as '\”' to safely include them.
+// Any single quotes in the input are escaped as '\” to safely include them.
 func shellQuote(s string) string {
 	if s == "" {
 		return "''"
@@ -141,4 +167,8 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 
-// openInFileManager opens the given path in the system file manager
+// batchQuote returns a Windows batch-escaped argument using double quotes.
+// Embedded double quotes are escaped by doubling them.
+func batchQuote(s string) string {
+	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
+}

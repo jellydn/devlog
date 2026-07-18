@@ -55,6 +55,27 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
         continue-on-error: true
 
+  test-extension:
+    name: Browser extension tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: browser-extension
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: browser-extension/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run extension tests
+        run: npm test
+
   multi-platform:
     name: Build verification (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

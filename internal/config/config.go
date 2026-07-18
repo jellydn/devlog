@@ -149,24 +149,37 @@ func interpolateEnvVars(input string) string {
 	})
 }
 
-// CleanupOldRuns removes old log directories based on retention policy
-func (c *Config) CleanupOldRuns(dryRun bool) error {
+// CleanupResult describes directories selected for removal by CleanupOldRuns.
+type CleanupResult struct {
+	// Removed lists directories that were removed (or would be removed in dry-run).
+	Removed []string
+	// Failed maps directory paths that could not be removed to the error.
+	Failed map[string]error
+}
+
+// CleanupOldRuns removes old log directories based on retention policy.
+// It does not print; callers format CleanupResult for the user.
+func (c *Config) CleanupOldRuns(dryRun bool) (*CleanupResult, error) {
+	result := &CleanupResult{
+		Failed: make(map[string]error),
+	}
+
 	// Only cleanup for timestamped mode
 	if c.RunMode != "timestamped" {
-		return nil
+		return result, nil
 	}
 
 	// Skip if no retention policy is set
 	if c.MaxRuns == 0 && c.RetentionDays == 0 {
-		return nil
+		return result, nil
 	}
 
 	entries, err := os.ReadDir(c.LogsDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil // Nothing to clean up
+			return result, nil // Nothing to clean up
 		}
-		return fmt.Errorf("failed to read logs directory: %w", err)
+		return result, fmt.Errorf("failed to read logs directory: %w", err)
 	}
 
 	// Collect directories with their info
@@ -212,19 +225,19 @@ func (c *Config) CleanupOldRuns(dryRun bool) error {
 		}
 	}
 
-	// Remove directories
+	// Remove directories (or record dry-run candidates)
 	for name := range toRemove {
 		dirPath := filepath.Join(c.LogsDir, name)
 		if dryRun {
-			fmt.Printf("[DRY RUN] Would remove: %s\n", dirPath)
-		} else {
-			if err := os.RemoveAll(dirPath); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to remove %s: %v\n", dirPath, err)
-			} else {
-				fmt.Printf("Removed old log directory: %s\n", dirPath)
-			}
+			result.Removed = append(result.Removed, dirPath)
+			continue
 		}
+		if err := os.RemoveAll(dirPath); err != nil {
+			result.Failed[dirPath] = err
+			continue
+		}
+		result.Removed = append(result.Removed, dirPath)
 	}
 
-	return nil
+	return result, nil
 }

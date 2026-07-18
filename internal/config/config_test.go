@@ -433,8 +433,15 @@ func TestCleanupOldRuns_MaxRuns(t *testing.T) {
 		MaxRuns: 3,
 	}
 
-	if err := cfg.CleanupOldRuns(false); err != nil {
+	result, err := cfg.CleanupOldRuns(false)
+	if err != nil {
 		t.Fatalf("CleanupOldRuns() failed: %v", err)
+	}
+	if len(result.Removed) != 2 {
+		t.Errorf("Removed = %v, want 2", result.Removed)
+	}
+	if len(result.Failed) != 0 {
+		t.Errorf("Failed = %v, want empty", result.Failed)
 	}
 
 	// Check that only 3 directories remain
@@ -484,9 +491,11 @@ func TestCleanupOldRuns_RetentionDays(t *testing.T) {
 		RetentionDays: 30,
 	}
 
-	if err := cfg.CleanupOldRuns(false); err != nil {
+	result, err := cfg.CleanupOldRuns(false)
+	if err != nil {
 		t.Fatalf("CleanupOldRuns() failed: %v", err)
 	}
+	_ = result
 
 	// Check that old directory is removed
 	if _, err := os.Stat(oldDir); !os.IsNotExist(err) {
@@ -520,8 +529,12 @@ func TestCleanupOldRuns_DryRun(t *testing.T) {
 		MaxRuns: 3,
 	}
 
-	if err := cfg.CleanupOldRuns(true); err != nil {
+	result, err := cfg.CleanupOldRuns(true)
+	if err != nil {
 		t.Fatalf("CleanupOldRuns() failed: %v", err)
+	}
+	if len(result.Removed) != 2 {
+		t.Errorf("DryRun Removed = %v, want 2 candidates", result.Removed)
 	}
 
 	// Check that all 5 directories still exist (dry run)
@@ -564,9 +577,11 @@ func TestCleanupOldRuns_NoPolicy(t *testing.T) {
 		RetentionDays: 0,
 	}
 
-	if err := cfg.CleanupOldRuns(false); err != nil {
+	result, err := cfg.CleanupOldRuns(false)
+	if err != nil {
 		t.Fatalf("CleanupOldRuns() failed: %v", err)
 	}
+	_ = result
 
 	// Check that all directories still exist (no policy)
 	entries, err := os.ReadDir(logsDir)
@@ -597,7 +612,9 @@ func TestCleanupOldRuns_OverwriteMode(t *testing.T) {
 	}
 
 	// Should return nil without error for overwrite mode
-	if err := cfg.CleanupOldRuns(false); err != nil {
+	result, err := cfg.CleanupOldRuns(false)
+	if err != nil {
 		t.Fatalf("CleanupOldRuns() failed: %v", err)
 	}
+	_ = result
 }

@@ -96,6 +96,9 @@ func writeBrowserHostWrapper(session string, browserLogPath string, levels []str
 	if err != nil {
 		return err
 	}
+	if err := natmsg.ValidateHostPath(hostPath); err != nil {
+		return fmt.Errorf("untrusted host binary: %w", err)
+	}
 
 	absLogPath, err := filepath.Abs(browserLogPath)
 	if err != nil {
@@ -103,7 +106,7 @@ func writeBrowserHostWrapper(session string, browserLogPath string, levels []str
 	}
 
 	wrapperPath := browserHostWrapperPath(session)
-	if err := os.MkdirAll(filepath.Dir(wrapperPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(wrapperPath), 0700); err != nil {
 		return err
 	}
 
@@ -113,7 +116,7 @@ func writeBrowserHostWrapper(session string, browserLogPath string, levels []str
 	} else {
 		script = generateShellScript(hostPath, absLogPath, levels)
 	}
-	if err := os.WriteFile(wrapperPath, []byte(script), 0755); err != nil {
+	if err := os.WriteFile(wrapperPath, []byte(script), 0700); err != nil {
 		return err
 	}
 

@@ -164,26 +164,95 @@ func TestInstallBraveManifest_MissingHostPath(t *testing.T) {
 	// Act
 	err := InstallBraveManifest(nonExistentPath, extensionID)
 
-	// Assert - Should succeed even if host binary doesn't exist
-	// (the manifest just needs to reference a path)
+	// Assert - host path must exist and be owned by the current user
+	if err == nil {
+		t.Fatal("expected error for missing host binary, got nil")
+	}
+	if !strings.Contains(err.Error(), "host path") && !strings.Contains(err.Error(), "does-not-exist") {
+		t.Errorf("error = %q, want host path validation failure", err.Error())
+	}
+}
+
+func TestInstallBraveManifest_ManifestMode0600(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file mode bits not meaningful on Windows")
+	}
+	tmpDir := t.TempDir()
+	hostPath := filepath.Join(tmpDir, "devlog-host")
+	if err := os.WriteFile(hostPath, []byte("#! fake"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	home := os.Getenv("HOME")
+	defer os.Setenv("HOME", home)
+	os.Setenv("HOME", tmpDir)
+	xdg := os.Getenv("XDG_CONFIG_HOME")
+	defer os.Setenv("XDG_CONFIG_HOME", xdg)
+	os.Unsetenv("XDG_CONFIG_HOME")
+
+	if err := InstallBraveManifest(hostPath, "testid"); err != nil {
+		t.Fatalf("InstallBraveManifest: %v", err)
+	}
+	manifestPath := filepath.Join(GetBraveNativeMessagingDir(), ManifestFileName)
+	info, err := os.Stat(manifestPath)
 	if err != nil {
-		t.Errorf("expected success even with missing host binary, got: %v", err)
+		t.Fatal(err)
 	}
+	if info.Mode().Perm() != 0600 {
+		t.Errorf("manifest mode = %o, want 0600", info.Mode().Perm())
+	}
+}
 
-	// Verify manifest was created with the specified path
-	manifestPath := filepath.Join(GetBraveNativeMessagingDir(), "com.devlog.host.json")
-	data, err := os.ReadFile(manifestPath)
+func TestValidateHostPath_Missing(t *testing.T) {
+	err := ValidateHostPath(filepath.Join(t.TempDir(), "missing"))
+	if err == nil {
+		t.Fatal("expected error for missing path")
+	}
+}
+
+func TestRepairStaleManifestPaths(t *testing.T) {
+	tmpDir := t.TempDir()
+	hostPath := filepath.Join(tmpDir, "devlog-host")
+	if err := os.WriteFile(hostPath, []byte("#! host"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	stalePath := filepath.Join(tmpDir, "missing-wrapper.sh")
+
+	home := os.Getenv("HOME")
+	defer os.Setenv("HOME", home)
+	os.Setenv("HOME", tmpDir)
+	xdg := os.Getenv("XDG_CONFIG_HOME")
+	defer os.Setenv("XDG_CONFIG_HOME", xdg)
+	os.Unsetenv("XDG_CONFIG_HOME")
+
+	if err := InstallChromeManifest(hostPath, "ext"); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	// Point manifest at a missing wrapper
+	if err := UpdateManifestPath(hostPath); err != nil {
+		t.Fatalf("reset path: %v", err)
+	}
+	// Manually set path to stale (bypass ValidateHostPath by editing JSON)
+	manifestPath := filepath.Join(GetChromeNativeMessagingDir(), ManifestFileName)
+	data, _ := os.ReadFile(manifestPath)
+	var raw map[string]interface{}
+	_ = json.Unmarshal(data, &raw)
+	raw["path"] = stalePath
+	out, _ := json.MarshalIndent(raw, "", "  ")
+	_ = os.WriteFile(manifestPath, out, 0600)
+
+	repaired, err := RepairStaleManifestPaths(hostPath)
 	if err != nil {
-		t.Fatalf("failed to read manifest: %v", err)
+		t.Fatalf("RepairStaleManifestPaths: %v", err)
 	}
-
-	var manifest ChromeManifest
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		t.Fatalf("failed to unmarshal manifest: %v", err)
+	if repaired < 1 {
+		t.Fatalf("repaired = %d, want >= 1", repaired)
 	}
-
-	if manifest.Path != nonExistentPath {
-		t.Errorf("Path = %q, want %q", manifest.Path, nonExistentPath)
+	paths, err := ReadManifestPaths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if paths[manifestPath] != hostPath {
+		t.Errorf("path = %q, want %q", paths[manifestPath], hostPath)
 	}
 }
 

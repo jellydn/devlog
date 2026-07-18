@@ -102,6 +102,9 @@ func getFirefoxDirs() []string {
 }
 
 func InstallChromeManifest(hostPath string, extensionID string) error {
+	if err := ValidateHostPath(hostPath); err != nil {
+		return err
+	}
 	dir := GetChromeNativeMessagingDir()
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create Chrome native messaging directory: %w", err)
@@ -121,7 +124,7 @@ func InstallChromeManifest(hostPath string, extensionID string) error {
 	}
 
 	manifestPath := filepath.Join(dir, "com.devlog.host.json")
-	if err := os.WriteFile(manifestPath, data, 0644); err != nil {
+	if err := os.WriteFile(manifestPath, data, 0600); err != nil {
 		return fmt.Errorf("failed to write Chrome manifest: %w", err)
 	}
 
@@ -129,6 +132,9 @@ func InstallChromeManifest(hostPath string, extensionID string) error {
 }
 
 func InstallBraveManifest(hostPath string, extensionID string) error {
+	if err := ValidateHostPath(hostPath); err != nil {
+		return err
+	}
 	dir := GetBraveNativeMessagingDir()
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create Brave native messaging directory: %w", err)
@@ -148,7 +154,7 @@ func InstallBraveManifest(hostPath string, extensionID string) error {
 	}
 
 	manifestPath := filepath.Join(dir, "com.devlog.host.json")
-	if err := os.WriteFile(manifestPath, data, 0644); err != nil {
+	if err := os.WriteFile(manifestPath, data, 0600); err != nil {
 		return fmt.Errorf("failed to write Brave manifest: %w", err)
 	}
 
@@ -160,6 +166,9 @@ func InstallFirefoxManifest(hostPath string) error {
 }
 
 func InstallFirefoxManifestWithID(hostPath string, extensionID string) error {
+	if err := ValidateHostPath(hostPath); err != nil {
+		return err
+	}
 	allowedExts := []string{extensionID}
 
 	// For development, also allow the UUID format which Firefox generates for unpacked extensions
@@ -186,7 +195,7 @@ func InstallFirefoxManifestWithID(hostPath string, extensionID string) error {
 			return fmt.Errorf("failed to create native messaging directory %s: %w", dir, err)
 		}
 		manifestPath := filepath.Join(dir, "com.devlog.host.json")
-		if err := os.WriteFile(manifestPath, data, 0644); err != nil {
+		if err := os.WriteFile(manifestPath, data, 0600); err != nil {
 			return fmt.Errorf("failed to write manifest to %s: %w", dir, err)
 		}
 	}
@@ -195,7 +204,10 @@ func InstallFirefoxManifestWithID(hostPath string, extensionID string) error {
 }
 
 func UpdateManifestPath(newPath string) error {
-	dirs := append([]string{GetChromeNativeMessagingDir(), GetBraveNativeMessagingDir()}, getFirefoxDirs()...)
+	if err := ValidateHostPath(newPath); err != nil {
+		return err
+	}
+	dirs := ManifestDirs()
 	manifestFile := "com.devlog.host.json"
 	updated := false
 	var updateErrors []string
@@ -223,7 +235,7 @@ func UpdateManifestPath(newPath string) error {
 			continue
 		}
 
-		if err := os.WriteFile(manifestPath, out, 0644); err != nil {
+		if err := os.WriteFile(manifestPath, out, 0600); err != nil {
 			updateErrors = append(updateErrors, fmt.Sprintf("%s: failed to write file: %v", manifestPath, err))
 			continue
 		}
@@ -246,8 +258,8 @@ func UpdateManifestPath(newPath string) error {
 }
 
 func IsManifestPathInUse(targetPath string) (bool, error) {
-	dirs := append([]string{GetChromeNativeMessagingDir(), GetBraveNativeMessagingDir()}, getFirefoxDirs()...)
-	manifestFile := "com.devlog.host.json"
+	dirs := ManifestDirs()
+	manifestFile := ManifestFileName
 	targetPath = filepath.Clean(targetPath)
 	foundManifest := false
 	var queryErrors []string
@@ -311,4 +323,82 @@ func FindDevlogHostBinary() (string, error) {
 	}
 
 	return "", fmt.Errorf("devlog-host binary not found in %s (searched for: %s)", dir, strings.Join(names, ", "))
+}
+
+// ManifestFileName is the native messaging host registration filename.
+const ManifestFileName = "com.devlog.host.json"
+
+// ManifestDirs returns all known native messaging host directories for supported browsers.
+func ManifestDirs() []string {
+	return append([]string{GetChromeNativeMessagingDir(), GetBraveNativeMessagingDir()}, getFirefoxDirs()...)
+}
+
+// ReadManifestPaths returns the path field from each installed com.devlog.host.json.
+// Missing manifests are skipped. Returns an error only if a present manifest cannot be read/parsed.
+func ReadManifestPaths() (map[string]string, error) {
+	paths := make(map[string]string)
+	var errs []string
+	for _, dir := range ManifestDirs() {
+		manifestPath := filepath.Join(dir, ManifestFileName)
+		data, err := os.ReadFile(manifestPath)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			errs = append(errs, fmt.Sprintf("%s: %v", manifestPath, err))
+			continue
+		}
+		var raw map[string]interface{}
+		if err := json.Unmarshal(data, &raw); err != nil {
+			errs = append(errs, fmt.Sprintf("%s: invalid JSON: %v", manifestPath, err))
+			continue
+		}
+		p, ok := raw["path"].(string)
+		if !ok || p == "" {
+			errs = append(errs, fmt.Sprintf("%s: missing path field", manifestPath))
+			continue
+		}
+		paths[manifestPath] = p
+	}
+	if len(errs) > 0 {
+		return paths, fmt.Errorf("failed to read some manifests: %s", strings.Join(errs, "; "))
+	}
+	return paths, nil
+}
+
+// RepairStaleManifestPaths rewrites any installed manifest whose path does not exist
+// back to hostPath (typically the real devlog-host binary).
+func RepairStaleManifestPaths(hostPath string) (repaired int, err error) {
+	if err := ValidateHostPath(hostPath); err != nil {
+		return 0, err
+	}
+	paths, readErr := ReadManifestPaths()
+	// Continue with any paths that were successfully read.
+	for manifestPath, current := range paths {
+		if _, statErr := os.Stat(current); statErr == nil {
+			continue
+		}
+		// Path missing — rewrite this single manifest.
+		data, err := os.ReadFile(manifestPath)
+		if err != nil {
+			continue
+		}
+		var raw map[string]interface{}
+		if err := json.Unmarshal(data, &raw); err != nil {
+			continue
+		}
+		raw["path"] = hostPath
+		out, err := json.MarshalIndent(raw, "", "  ")
+		if err != nil {
+			continue
+		}
+		if err := os.WriteFile(manifestPath, out, 0600); err != nil {
+			continue
+		}
+		repaired++
+	}
+	if readErr != nil && repaired == 0 {
+		return repaired, readErr
+	}
+	return repaired, nil
 }

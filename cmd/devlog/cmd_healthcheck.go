@@ -34,7 +34,8 @@ func cmdHealthcheck(cfg *config.Config, args []string) error {
 
 	// Check devlog-host binary
 	fmt.Printf("%-*s ", maxLabelLen, "devlog-host binary:")
-	hostPath, err := natmsg.FindDevlogHostBinary()
+	var hostPath string
+	hostPath, err = natmsg.FindDevlogHostBinary()
 	if err != nil {
 		fmt.Println("✗ NOT FOUND")
 		fmt.Println("  devlog-host is required for browser logging.")
@@ -90,6 +91,34 @@ func cmdHealthcheck(cfg *config.Config, args []string) error {
 		fmt.Println("            devlog register --brave --extension-id <id>")
 		fmt.Println("            devlog register --firefox")
 		allGood = false
+	}
+
+	// Check that manifest path targets exist on disk (self-heal when possible)
+	fmt.Printf("%-*s ", maxLabelLen, "Manifest host path:")
+	if hostPath != "" {
+		if repaired, err := natmsg.RepairStaleManifestPaths(hostPath); err == nil && repaired > 0 {
+			fmt.Printf("✓ repaired %d stale path(s)\n", repaired)
+		}
+	}
+	paths, pathErr := natmsg.ReadManifestPaths()
+	if pathErr != nil && len(paths) == 0 {
+		fmt.Println("○ none installed")
+	} else {
+		stale := 0
+		for _, p := range paths {
+			if _, err := os.Stat(p); err != nil {
+				stale++
+			}
+		}
+		if stale > 0 {
+			fmt.Printf("✗ %d path(s) missing on disk\n", stale)
+			fmt.Println("  Run: devlog up  (or re-register) to repair")
+			allGood = false
+		} else if len(paths) == 0 {
+			fmt.Println("○ none installed")
+		} else {
+			fmt.Printf("✓ %d path(s) exist\n", len(paths))
+		}
 	}
 
 	fmt.Println()

@@ -96,8 +96,23 @@ func writeBrowserHostWrapper(session string, browserLogPath string, levels []str
 	if err != nil {
 		return err
 	}
+	return writeBrowserHostWrapperWithHost(session, browserLogPath, levels, hostPath)
+}
+
+// writeBrowserHostWrapperWithHost is the testable core of writeBrowserHostWrapper.
+func writeBrowserHostWrapperWithHost(session, browserLogPath string, levels []string, hostPath string) error {
 	if err := natmsg.ValidateHostPath(hostPath); err != nil {
 		return fmt.Errorf("untrusted host binary: %w", err)
+	}
+
+	// Self-heal: if a previous unclean shutdown left manifests pointing at a
+	// missing wrapper, restore them to the real binary before we rewrite.
+	if _, err := natmsg.RepairStaleManifestPaths(hostPath); err != nil {
+		// Non-fatal when no manifests exist yet.
+		if !strings.Contains(err.Error(), "failed to read some manifests") &&
+			!strings.Contains(err.Error(), "no native messaging") {
+			// continue; UpdateManifestPath will report clearer errors
+		}
 	}
 
 	absLogPath, err := filepath.Abs(browserLogPath)
@@ -152,14 +167,25 @@ func restoreBrowserHostWrapper(session string) {
 	if err != nil {
 		return
 	}
+	restoreBrowserHostWrapperWithHost(session, hostPath)
+}
 
+// restoreBrowserHostWrapperWithHost restores manifests that still point at this
+// session's wrapper (even if the wrapper file was already deleted) and removes
+// the wrapper file if present.
+func restoreBrowserHostWrapperWithHost(session, hostPath string) {
 	wrapperPath := browserHostWrapperPath(session)
+
+	// Restore if our wrapper is referenced, or if any path is missing (stale).
 	inUse, err := natmsg.IsManifestPathInUse(wrapperPath)
 	if err == nil && inUse {
-		natmsg.UpdateManifestPath(hostPath)
+		_ = natmsg.UpdateManifestPath(hostPath)
+	} else {
+		// Also repair any other stale missing paths back to the real binary.
+		_, _ = natmsg.RepairStaleManifestPaths(hostPath)
 	}
 
-	os.Remove(wrapperPath)
+	_ = os.Remove(wrapperPath)
 }
 
 // batchQuote returns a Windows batch-escaped argument using double quotes.

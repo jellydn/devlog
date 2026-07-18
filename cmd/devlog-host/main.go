@@ -32,13 +32,22 @@ logs to the specified file. It runs until stdin is closed.
 `
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprint(os.Stderr, usage)
+	if err := run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
+		fmt.Fprint(os.Stderr, err.Error())
 		os.Exit(1)
 	}
+}
 
-	logPath := os.Args[1]
-	levels := os.Args[2:]
+// run is the testable entry point for the native messaging host.
+// args are command-line arguments after the program name.
+func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
+	if len(args) < 1 {
+		fmt.Fprint(stderr, usage)
+		return fmt.Errorf("log file path is required")
+	}
+
+	logPath := args[0]
+	levels := append([]string(nil), args[1:]...)
 
 	// Convert levels to lowercase for case-insensitive matching
 	for i, level := range levels {
@@ -48,38 +57,43 @@ func main() {
 	// Create logger
 	log, err := logger.New(logPath, levels)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: failed to create logger: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("Error: failed to create logger: %v\n", err)
 	}
 	defer log.Close()
 
-	// Create native messaging host
-	host := natmsg.NewHost()
+	return processMessages(log, natmsg.NewHostWithStreams(stdin, stdout), stderr)
+}
 
-	// Process messages until stdin is closed
+// messageLogger is the subset of logger.Logger used by the host loop.
+type messageLogger interface {
+	Log(msg *natmsg.Message) error
+}
+
+// processMessages reads native messages until EOF and writes matching levels to the log.
+func processMessages(log messageLogger, host *natmsg.Host, stderr io.Writer) error {
 	for {
 		msg, err := host.ReadMessage()
 		if err != nil {
 			if err == io.EOF {
 				// Browser closed the connection, exit cleanly
-				break
+				return nil
 			}
 			// Log error but continue processing
-			fmt.Fprintf(os.Stderr, "Error reading message: %v\n", err)
+			fmt.Fprintf(stderr, "Error reading message: %v\n", err)
 			host.SendAck(false, err.Error())
 			continue
 		}
 
 		// Write message to log file
 		if err := log.Log(msg); err != nil {
-			fmt.Fprintf(os.Stderr, "Error writing log: %v\n", err)
+			fmt.Fprintf(stderr, "Error writing log: %v\n", err)
 			host.SendAck(false, err.Error())
 			continue
 		}
 
 		// Send acknowledgment
 		if err := host.SendAck(true, ""); err != nil {
-			fmt.Fprintf(os.Stderr, "Error sending ack: %v\n", err)
+			fmt.Fprintf(stderr, "Error sending ack: %v\n", err)
 			// Continue even if ack fails
 		}
 	}

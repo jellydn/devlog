@@ -9,6 +9,7 @@ import (
 
 	"github.com/jellydn/devlog/internal/natmsg"
 	"github.com/jellydn/devlog/internal/shellescape"
+	"github.com/jellydn/devlog/internal/tmux"
 )
 
 func findConfigFile() string {
@@ -121,6 +122,10 @@ func writeBrowserHostWrapperWithHost(session, browserLogPath string, levels []st
 	}
 
 	wrapperPath := browserHostWrapperPath(session)
+	if err := refuseClobberActiveWrapper(wrapperPath); err != nil {
+		return err
+	}
+
 	if err := os.MkdirAll(filepath.Dir(wrapperPath), 0700); err != nil {
 		return err
 	}
@@ -140,6 +145,56 @@ func writeBrowserHostWrapperWithHost(session, browserLogPath string, levels []st
 	}
 
 	return nil
+}
+
+// refuseClobberActiveWrapper returns an error if any installed manifest currently
+// points at a different session's wrapper whose tmux session is still alive.
+func refuseClobberActiveWrapper(desiredWrapper string) error {
+	desiredWrapper = filepath.Clean(desiredWrapper)
+	paths, err := natmsg.ReadManifestPaths()
+	if err != nil && len(paths) == 0 {
+		// No manifests installed yet — nothing to clobber.
+		return nil
+	}
+	for _, current := range paths {
+		current = filepath.Clean(current)
+		if current == desiredWrapper {
+			continue
+		}
+		otherSession, ok := sessionFromWrapperPath(current)
+		if !ok {
+			continue
+		}
+		// Only refuse when the other wrapper still exists AND its session is live.
+		if _, statErr := os.Stat(current); statErr != nil {
+			continue
+		}
+		if tmux.NewRunner(otherSession).SessionExists() {
+			return fmt.Errorf("browser logging is already in use by session %q; run 'devlog down' in that session first", otherSession)
+		}
+	}
+	return nil
+}
+
+// sessionFromWrapperPath extracts the session name from a wrapper path like
+// .../devlog-host-wrapper-<session>.sh|.bat
+func sessionFromWrapperPath(path string) (string, bool) {
+	base := filepath.Base(path)
+	const prefix = "devlog-host-wrapper-"
+	if !strings.HasPrefix(base, prefix) {
+		return "", false
+	}
+	name := strings.TrimPrefix(base, prefix)
+	for _, ext := range []string{".sh", ".bat"} {
+		if strings.HasSuffix(name, ext) {
+			name = strings.TrimSuffix(name, ext)
+			break
+		}
+	}
+	if name == "" {
+		return "", false
+	}
+	return name, true
 }
 
 func generateShellScript(hostPath, absLogPath string, levels []string) string {

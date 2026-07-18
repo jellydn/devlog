@@ -3,3 +3,5 @@
 /devlog-host
 coverage.txt
 dist/
+node_modules/
+browser-extension/node_modules/

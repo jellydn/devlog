@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/jellydn/devlog/internal/config"
 )
 
 // Runner handles tmux session operations
@@ -28,7 +30,7 @@ func (r *Runner) SessionExists() bool {
 }
 
 // CreateSession creates a new tmux session with the given windows and panes
-func (r *Runner) CreateSession(logsDir string, windows []WindowConfig) error {
+func (r *Runner) CreateSession(logsDir string, windows []config.WindowConfig) error {
 	if r.SessionExists() {
 		return fmt.Errorf("tmux session '%s' already exists", r.sessionName)
 	}
@@ -86,7 +88,7 @@ func (r *Runner) CreateSession(logsDir string, windows []WindowConfig) error {
 	return nil
 }
 
-func ensurePaneLogFiles(logsDir string, windows []WindowConfig) error {
+func ensurePaneLogFiles(logsDir string, windows []config.WindowConfig) error {
 	seen := make(map[string]struct{})
 	for _, window := range windows {
 		for _, pane := range window.Panes {
@@ -118,7 +120,7 @@ func ensurePaneLogFiles(logsDir string, windows []WindowConfig) error {
 }
 
 // createWindow creates a new window with its panes
-func (r *Runner) createWindow(windowIndex int, window WindowConfig, logsDir string) error {
+func (r *Runner) createWindow(windowIndex int, window config.WindowConfig, logsDir string) error {
 	cmd := exec.Command("tmux", "new-window", "-t", r.sessionName, "-n", window.Name)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to create window: %w", err)
@@ -342,18 +344,6 @@ type PaneInfo struct {
 	ID      string
 	Index   int
 	Command string
-}
-
-// WindowConfig represents a tmux window configuration
-type WindowConfig struct {
-	Name  string
-	Panes []PaneConfig
-}
-
-// PaneConfig represents a tmux pane configuration
-type PaneConfig struct {
-	Cmd string
-	Log string
 }
 
 // CheckVersion returns the tmux version string or an error if tmux is not installed

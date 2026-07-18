@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jellydn/devlog/internal/config"
 )
 
 func TestRunner_SessionExists(t *testing.T) {
@@ -50,10 +52,10 @@ func TestRunner_CreateSession_AlreadyExists(t *testing.T) {
 	defer exec.Command("tmux", "kill-session", "-t", "test-duplicate-session").Run()
 
 	// Try to create again - should fail
-	err := runner.CreateSession("/tmp/testlogs", []WindowConfig{
+	err := runner.CreateSession("/tmp/testlogs", []config.WindowConfig{
 		{
 			Name: "main",
-			Panes: []PaneConfig{
+			Panes: []config.PaneConfig{
 				{Cmd: "echo test", Log: "test.log"},
 			},
 		},
@@ -97,17 +99,17 @@ func TestRunner_CreateAndKillSession(t *testing.T) {
 	exec.Command("tmux", "kill-session", "-t", sessionName).Run()
 
 	logsDir := t.TempDir()
-	windows := []WindowConfig{
+	windows := []config.WindowConfig{
 		{
 			Name: "main",
-			Panes: []PaneConfig{
+			Panes: []config.PaneConfig{
 				{Cmd: "echo 'pane 1'", Log: "pane1.log"},
 				{Cmd: "echo 'pane 2'", Log: "pane2.log"},
 			},
 		},
 		{
 			Name: "secondary",
-			Panes: []PaneConfig{
+			Panes: []config.PaneConfig{
 				{Cmd: "echo 'pane 3'", Log: "pane3.log"},
 			},
 		},
@@ -193,7 +195,7 @@ func TestRunner_CreateSession_NoWindows(t *testing.T) {
 	runner := NewRunner("test-no-windows")
 	logsDir := t.TempDir()
 
-	err := runner.CreateSession(logsDir, []WindowConfig{})
+	err := runner.CreateSession(logsDir, []config.WindowConfig{})
 	if err == nil {
 		t.Error("CreateSession() expected error for empty windows, got nil")
 	}
@@ -215,10 +217,10 @@ func TestRunner_CreateSession_CreatesLogsDir(t *testing.T) {
 	exec.Command("tmux", "kill-session", "-t", sessionName).Run()
 
 	logsDir := t.TempDir() + "/nested/logs/dir"
-	windows := []WindowConfig{
+	windows := []config.WindowConfig{
 		{
 			Name: "main",
-			Panes: []PaneConfig{
+			Panes: []config.PaneConfig{
 				{Cmd: "echo test", Log: "test.log"},
 			},
 		},
@@ -257,10 +259,10 @@ func TestCheckVersion(t *testing.T) {
 
 func TestEnsurePaneLogFiles(t *testing.T) {
 	logsDir := t.TempDir()
-	windows := []WindowConfig{
+	windows := []config.WindowConfig{
 		{
 			Name: "main",
-			Panes: []PaneConfig{
+			Panes: []config.PaneConfig{
 				{Cmd: "echo test", Log: "web.log"},
 				{Cmd: "echo test", Log: "nested/api.log"},
 				{Cmd: "echo test", Log: "nested/api.log"},

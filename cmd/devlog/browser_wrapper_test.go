@@ -3,8 +3,10 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/jellydn/devlog/internal/natmsg"
@@ -138,5 +140,85 @@ func TestBrowserHostWrapper_StaleRecovery(t *testing.T) {
 	}
 	if got := readChromePath(t); got != wrapperPath {
 		t.Errorf("manifest path = %q, want %q", got, wrapperPath)
+	}
+}
+
+func TestSessionFromWrapperPath(t *testing.T) {
+	tests := []struct {
+		path string
+		want string
+		ok   bool
+	}{
+		{filepath.Join("/tmp", "devlog", "wrappers", "devlog-host-wrapper-myapp.sh"), "myapp", true},
+		{filepath.Join("/tmp", "devlog", "wrappers", "devlog-host-wrapper-myapp.bat"), "myapp", true},
+		{filepath.Join("/tmp", "devlog-host"), "", false},
+		{filepath.Join("/tmp", "devlog", "wrappers", "devlog-host-wrapper-.sh"), "", false},
+	}
+	for _, tt := range tests {
+		got, ok := sessionFromWrapperPath(tt.path)
+		if ok != tt.ok || got != tt.want {
+			t.Errorf("sessionFromWrapperPath(%q) = (%q, %v), want (%q, %v)", tt.path, got, ok, tt.want, tt.ok)
+		}
+	}
+}
+
+func TestRefuseClobberActiveWrapper_SameSessionAllowed(t *testing.T) {
+	_, cleanup := withIsolatedHome(t)
+	defer cleanup()
+
+	tmp := t.TempDir()
+	hostPath := filepath.Join(tmp, "devlog-host")
+	if err := os.WriteFile(hostPath, []byte("#!/bin/sh\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := natmsg.InstallChromeManifest(hostPath, "testid"); err != nil {
+		t.Fatal(err)
+	}
+	logPath := filepath.Join(tmp, "b.log")
+	if err := writeBrowserHostWrapperWithHost("same", logPath, nil, hostPath); err != nil {
+		t.Fatal(err)
+	}
+	// Rewriting for the same session should be allowed even without a live tmux session
+	if err := writeBrowserHostWrapperWithHost("same", logPath, []string{"error"}, hostPath); err != nil {
+		t.Fatalf("same session rewrite should be allowed: %v", err)
+	}
+}
+
+func TestRefuseClobberActiveWrapper_OtherLiveSession(t *testing.T) {
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skip("tmux not available")
+	}
+	_, cleanup := withIsolatedHome(t)
+	defer cleanup()
+
+	tmp := t.TempDir()
+	hostPath := filepath.Join(tmp, "devlog-host")
+	if err := os.WriteFile(hostPath, []byte("#!/bin/sh\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := natmsg.InstallChromeManifest(hostPath, "testid"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a live tmux session named other-live
+	session := "other-live"
+	_ = exec.Command("tmux", "kill-session", "-t", session).Run()
+	if err := exec.Command("tmux", "new-session", "-d", "-s", session).Run(); err != nil {
+		t.Skipf("could not create tmux session: %v", err)
+	}
+	defer exec.Command("tmux", "kill-session", "-t", session).Run()
+
+	logPath := filepath.Join(tmp, "b.log")
+	if err := writeBrowserHostWrapperWithHost(session, logPath, nil, hostPath); err != nil {
+		t.Fatalf("setup other session wrapper: %v", err)
+	}
+
+	// Attempt to clobber from a different session while other is live
+	err := writeBrowserHostWrapperWithHost("new-session", logPath, nil, hostPath)
+	if err == nil {
+		t.Fatal("expected clobber refusal when other session is live")
+	}
+	if !strings.Contains(err.Error(), "already in use") {
+		t.Errorf("error = %q, want already in use", err.Error())
 	}
 }

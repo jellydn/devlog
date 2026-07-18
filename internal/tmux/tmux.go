@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -265,26 +266,19 @@ func (r *Runner) GetSessionInfo() (*SessionInfo, error) {
 		Windows: []WindowInfo{},
 	}
 
-	cmd := exec.Command("tmux", "list-windows", "-t", r.sessionName, "-F", "#{window_index}|#{window_name}|#{window_panes}")
+	// Use tabs as field separators — window/pane names can contain '|' but not tabs
+	// in tmux -F output.
+	cmd := exec.Command("tmux", "list-windows", "-t", r.sessionName, "-F", "#{window_index}\t#{window_name}\t#{window_panes}")
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list windows: %w", err)
 	}
 
-	// Parse window list (format: index|name|pane_count)
-	lines := strings.Split(string(output), "\n")
-	for _, line := range lines {
-		if line == "" {
+	for _, line := range strings.Split(string(output), "\n") {
+		window, ok := parseWindowLine(line)
+		if !ok {
 			continue
 		}
-		parts := strings.Split(line, "|")
-		if len(parts) != 3 {
-			continue
-		}
-		var window WindowInfo
-		fmt.Sscanf(parts[0], "%d", &window.Index)
-		window.Name = parts[1]
-		fmt.Sscanf(parts[2], "%d", &window.PaneCount)
 
 		panes, err := r.getWindowPanes(window.Index)
 		if err == nil {
@@ -300,30 +294,68 @@ func (r *Runner) GetSessionInfo() (*SessionInfo, error) {
 // getWindowPanes returns information about all panes in a window
 func (r *Runner) getWindowPanes(windowIndex int) ([]PaneInfo, error) {
 	windowTarget := fmt.Sprintf("%s:%d", r.sessionName, windowIndex)
-	cmd := exec.Command("tmux", "list-panes", "-t", windowTarget, "-F", "#{pane_id}|#{pane_index}|#{pane_current_command}")
+	cmd := exec.Command("tmux", "list-panes", "-t", windowTarget, "-F", "#{pane_id}\t#{pane_index}\t#{pane_current_command}")
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, err
 	}
 
 	var panes []PaneInfo
-	lines := strings.Split(string(output), "\n")
-	for _, line := range lines {
-		if line == "" {
+	for _, line := range strings.Split(string(output), "\n") {
+		pane, ok := parsePaneLine(line)
+		if !ok {
 			continue
 		}
-		parts := strings.Split(line, "|")
-		if len(parts) != 3 {
-			continue
-		}
-		var pane PaneInfo
-		pane.ID = parts[0]
-		fmt.Sscanf(parts[1], "%d", &pane.Index)
-		pane.Command = parts[2]
 		panes = append(panes, pane)
 	}
 
 	return panes, nil
+}
+
+// parseWindowLine parses a tab-delimited tmux list-windows -F line:
+// index\tname\tpane_count
+func parseWindowLine(line string) (WindowInfo, bool) {
+	var window WindowInfo
+	if line == "" {
+		return window, false
+	}
+	parts := strings.Split(line, "\t")
+	if len(parts) != 3 {
+		return window, false
+	}
+	index, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return window, false
+	}
+	paneCount, err := strconv.Atoi(parts[2])
+	if err != nil {
+		return window, false
+	}
+	window.Index = index
+	window.Name = parts[1]
+	window.PaneCount = paneCount
+	return window, true
+}
+
+// parsePaneLine parses a tab-delimited tmux list-panes -F line:
+// id\tindex\tcommand
+func parsePaneLine(line string) (PaneInfo, bool) {
+	var pane PaneInfo
+	if line == "" {
+		return pane, false
+	}
+	parts := strings.Split(line, "\t")
+	if len(parts) != 3 {
+		return pane, false
+	}
+	index, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return pane, false
+	}
+	pane.ID = parts[0]
+	pane.Index = index
+	pane.Command = parts[2]
+	return pane, true
 }
 
 // SessionInfo holds information about a tmux session

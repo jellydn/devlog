@@ -289,3 +289,48 @@ func TestEnsurePaneLogFiles(t *testing.T) {
 		}
 	}
 }
+
+func TestParseWindowLine_NameWithPipe(t *testing.T) {
+	window, ok := parseWindowLine("2\tapi|web\t3")
+	if !ok {
+		t.Fatal("parseWindowLine returned false for valid line with | in name")
+	}
+	if window.Index != 2 {
+		t.Errorf("Index = %d, want 2", window.Index)
+	}
+	if window.Name != "api|web" {
+		t.Errorf("Name = %q, want %q", window.Name, "api|web")
+	}
+	if window.PaneCount != 3 {
+		t.Errorf("PaneCount = %d, want 3", window.PaneCount)
+	}
+}
+
+func TestParseWindowLine_Invalid(t *testing.T) {
+	if _, ok := parseWindowLine(""); ok {
+		t.Error("empty line should fail")
+	}
+	// Pipe-delimited legacy format should not parse (we use tabs now)
+	if _, ok := parseWindowLine("1|main|2"); ok {
+		t.Error("pipe-delimited line should fail with tab parser")
+	}
+	if _, ok := parseWindowLine("x\tmain\t2"); ok {
+		t.Error("non-numeric index should fail")
+	}
+}
+
+func TestParsePaneLine_CommandWithPipe(t *testing.T) {
+	pane, ok := parsePaneLine("%0\t1\tsh -c 'echo a|b'")
+	if !ok {
+		t.Fatal("parsePaneLine returned false")
+	}
+	if pane.ID != "%0" {
+		t.Errorf("ID = %q, want %%0", pane.ID)
+	}
+	if pane.Index != 1 {
+		t.Errorf("Index = %d, want 1", pane.Index)
+	}
+	if pane.Command != "sh -c 'echo a|b'" {
+		t.Errorf("Command = %q", pane.Command)
+	}
+}

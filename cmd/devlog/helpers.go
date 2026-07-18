@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/jellydn/devlog/internal/natmsg"
+	"github.com/jellydn/devlog/internal/shellescape"
 )
 
 func findConfigFile() string {
@@ -126,9 +127,9 @@ func writeBrowserHostWrapper(session string, browserLogPath string, levels []str
 func generateShellScript(hostPath, absLogPath string, levels []string) string {
 	// Build script with proper shell escaping. exec replaces the shell with the host.
 	var scriptArgs []string
-	scriptArgs = append(scriptArgs, shellQuote(hostPath), shellQuote(absLogPath))
+	scriptArgs = append(scriptArgs, shellescape.Quote(hostPath), shellescape.Quote(absLogPath))
 	for _, level := range levels {
-		scriptArgs = append(scriptArgs, shellQuote(level))
+		scriptArgs = append(scriptArgs, shellescape.Quote(level))
 	}
 	return fmt.Sprintf("#!/bin/sh\nexec %s\n", strings.Join(scriptArgs, " "))
 }
@@ -156,15 +157,6 @@ func restoreBrowserHostWrapper(session string) {
 	}
 
 	os.Remove(wrapperPath)
-}
-
-// shellQuote returns a shell-escaped version of the string using single quotes.
-// Any single quotes in the input are escaped as '\” to safely include them.
-func shellQuote(s string) string {
-	if s == "" {
-		return "''"
-	}
-	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 
 // batchQuote returns a Windows batch-escaped argument using double quotes.

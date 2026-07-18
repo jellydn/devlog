@@ -72,15 +72,6 @@ func TestGenerateBatchScript_EscapesDoubleQuotes(t *testing.T) {
 	}
 }
 
-func TestShellQuote(t *testing.T) {
-	if shellQuote("") != "''" {
-		t.Errorf("shellQuote empty = %q", shellQuote(""))
-	}
-	if shellQuote("plain") != "'plain'" {
-		t.Errorf("shellQuote plain = %q", shellQuote("plain"))
-	}
-}
-
 func TestBatchQuote(t *testing.T) {
 	if batchQuote(`C:\a b\x.exe`) != `"C:\a b\x.exe"` {
 		t.Errorf("batchQuote spaces = %q", batchQuote(`C:\a b\x.exe`))

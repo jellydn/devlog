@@ -47,6 +47,19 @@ All collected data is:
 3. The native host writes logs to local files on your filesystem
 4. All data remains on your local machine
 
+
+
+## Native Messaging Trust Model
+
+Browser console capture uses Chromium/Firefox **Native Messaging**:
+
+1. **Primary trust boundary — extension allowlist.** Each installed `com.devlog.host.json` lists which extension IDs may launch the host (`allowed_origins` on Chrome/Brave, `allowed_extensions` on Firefox). The browser enforces this before spawning the host.
+2. **Host path rewrite.** `devlog up` may rewrite the manifest `path` field to a per-session wrapper under `os.UserCacheDir()/devlog/wrappers/`. The wrapper only exists so the host receives the active log file path and level filters. `devlog down` restores `path` to the real `devlog-host` binary.
+3. **Owner-only files.** Manifests are written with mode `0600` and wrappers with mode `0700`. On Unix, `devlog` refuses to register or rewrite a host path that is not owned by the current user.
+4. **Local only.** The host never opens network sockets; it only appends to the local log file configured for the session.
+
+If a session ends uncleanly and the wrapper is missing, run `devlog healthcheck` or `devlog up` again — stale missing paths are repaired back to the real binary when possible.
+
 ## Data Storage Location
 
 Log files are stored in the location you specify in your `devlog.yml` configuration file, typically in your project directory. The default structure is:

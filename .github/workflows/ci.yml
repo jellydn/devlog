@@ -43,6 +43,9 @@ jobs:
       - name: Run integration tests
         run: go test -tags=integration ./internal/tmux/
 
+      - name: Run e2e tests
+        run: go test -tags=e2e -v ./internal/e2e/
+
       - name: Build devlog
         run: go build ./cmd/devlog
 

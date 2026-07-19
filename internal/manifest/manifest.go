@@ -199,29 +199,10 @@ func UpdateManifestPath(newPath string) error {
 
 	for _, dir := range dirs {
 		manifestPath := filepath.Join(dir, manifestFile)
-		data, err := os.ReadFile(manifestPath)
-		if err != nil {
+		if err := rewriteManifestPath(manifestPath, newPath); err != nil {
 			if !errors.Is(err, os.ErrNotExist) {
 				updateErrors = append(updateErrors, fmt.Sprintf("%s: %v", manifestPath, err))
 			}
-			continue
-		}
-
-		var raw map[string]interface{}
-		if err := json.Unmarshal(data, &raw); err != nil {
-			updateErrors = append(updateErrors, fmt.Sprintf("%s: invalid JSON: %v", manifestPath, err))
-			continue
-		}
-
-		raw["path"] = newPath
-		out, err := json.MarshalIndent(raw, "", "  ")
-		if err != nil {
-			updateErrors = append(updateErrors, fmt.Sprintf("%s: failed to marshal JSON: %v", manifestPath, err))
-			continue
-		}
-
-		if err := os.WriteFile(manifestPath, out, 0600); err != nil {
-			updateErrors = append(updateErrors, fmt.Sprintf("%s: failed to write file: %v", manifestPath, err))
 			continue
 		}
 		updated = true
@@ -351,6 +332,29 @@ func ReadManifestPaths() (map[string]string, error) {
 	return paths, nil
 }
 
+// rewriteManifestPath reads a manifest JSON from manifestPath, updates its
+// "path" field to newPath, and writes it back. ReadFile errors (including
+// os.ErrNotExist) are returned unwrapped so callers can use errors.Is.
+func rewriteManifestPath(manifestPath, newPath string) error {
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return err
+	}
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return fmt.Errorf("invalid JSON: %w", err)
+	}
+	raw["path"] = newPath
+	out, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal: %w", err)
+	}
+	if err := os.WriteFile(manifestPath, out, 0600); err != nil {
+		return fmt.Errorf("failed to write: %w", err)
+	}
+	return nil
+}
+
 // RepairStaleManifestPaths rewrites any installed manifest whose path does not exist
 // back to hostPath (typically the real devlog-host binary).
 func RepairStaleManifestPaths(hostPath string) (repaired int, err error) {
@@ -358,26 +362,11 @@ func RepairStaleManifestPaths(hostPath string) (repaired int, err error) {
 		return 0, err
 	}
 	paths, readErr := ReadManifestPaths()
-	// Continue with any paths that were successfully read.
 	for manifestPath, current := range paths {
 		if _, statErr := os.Stat(current); statErr == nil {
 			continue
 		}
-		// Path missing — rewrite this single manifest.
-		data, err := os.ReadFile(manifestPath)
-		if err != nil {
-			continue
-		}
-		var raw map[string]interface{}
-		if err := json.Unmarshal(data, &raw); err != nil {
-			continue
-		}
-		raw["path"] = hostPath
-		out, err := json.MarshalIndent(raw, "", "  ")
-		if err != nil {
-			continue
-		}
-		if err := os.WriteFile(manifestPath, out, 0600); err != nil {
+		if err := rewriteManifestPath(manifestPath, hostPath); err != nil {
 			continue
 		}
 		repaired++

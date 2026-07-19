@@ -6,7 +6,21 @@ import (
 	"testing"
 )
 
-func TestTouchFile_CreatesFileAndParents(t *testing.T) {
+func TestTouchFile(t *testing.T) {
+	tests := []struct {
+		name string
+		fn   func(t *testing.T)
+	}{
+		{"CreatesFileAndParents", testCreatesFileAndParents},
+		{"ExistingFileNotTruncated", testExistingFileNotTruncated},
+		{"DefaultPermissions", testDefaultPermissions},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, tt.fn)
+	}
+}
+
+func testCreatesFileAndParents(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "a", "b", "test.log")
 
@@ -19,7 +33,7 @@ func TestTouchFile_CreatesFileAndParents(t *testing.T) {
 	}
 }
 
-func TestTouchFile_ExistingFileNotTruncated(t *testing.T) {
+func testExistingFileNotTruncated(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "existing.log")
 
@@ -39,7 +53,7 @@ func TestTouchFile_ExistingFileNotTruncated(t *testing.T) {
 	}
 }
 
-func TestTouchFile_DefaultPermissions(t *testing.T) {
+func testDefaultPermissions(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "perms.log")
 

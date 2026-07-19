@@ -10,18 +10,10 @@ import (
 func TestCmdHealthcheck_Basic(t *testing.T) {
 	// Create a temporary directory for test
 	tmpDir := t.TempDir()
-	originalDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get current directory: %v", err)
-	}
-	defer os.Chdir(originalDir)
-
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatalf("Failed to change directory: %v", err)
-	}
+	t.Chdir(tmpDir)
 
 	// Run healthcheck command
-	err = cmdHealthcheck(nil, nil)
+	err := cmdHealthcheck(nil, nil)
 
 	// Healthcheck may fail if tmux or devlog-host is not installed,
 	// but it should not panic or crash
@@ -33,18 +25,10 @@ func TestCmdHealthcheck_Basic(t *testing.T) {
 func TestCmdHealthcheck_WithArgs(t *testing.T) {
 	// Create a temporary directory for test
 	tmpDir := t.TempDir()
-	originalDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get current directory: %v", err)
-	}
-	defer os.Chdir(originalDir)
-
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatalf("Failed to change directory: %v", err)
-	}
+	t.Chdir(tmpDir)
 
 	// Run healthcheck command with args (should be ignored)
-	err = cmdHealthcheck(nil, []string{"--some-arg"})
+	err := cmdHealthcheck(nil, []string{"--some-arg"})
 
 	// Healthcheck should work with or without args
 	if err != nil && !strings.Contains(err.Error(), "healthcheck failed") {
@@ -69,15 +53,7 @@ func TestHealthcheckDoesNotRequireConfig(t *testing.T) {
 	// Verify that healthcheck can be called without config
 	// by testing in a directory without devlog.yml
 	tmpDir := t.TempDir()
-	originalDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get current directory: %v", err)
-	}
-	defer os.Chdir(originalDir)
-
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatalf("Failed to change directory: %v", err)
-	}
+	t.Chdir(tmpDir)
 
 	// Ensure no devlog.yml exists
 	if _, err := os.Stat(filepath.Join(tmpDir, "devlog.yml")); err == nil {
@@ -85,7 +61,7 @@ func TestHealthcheckDoesNotRequireConfig(t *testing.T) {
 	}
 
 	// Run healthcheck - should not fail due to missing config
-	err = cmdHealthcheck(nil, nil)
+	err := cmdHealthcheck(nil, nil)
 
 	// It may fail healthcheck, but should not fail due to missing config
 	if err != nil && !strings.Contains(err.Error(), "healthcheck failed") {
@@ -96,15 +72,7 @@ func TestHealthcheckDoesNotRequireConfig(t *testing.T) {
 func TestCmdHealthcheck_DetectsBraveManifest(t *testing.T) {
 	// Arrange
 	tmpDir := t.TempDir()
-	originalDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get current directory: %v", err)
-	}
-	defer os.Chdir(originalDir)
-
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatalf("Failed to change directory: %v", err)
-	}
+	t.Chdir(tmpDir)
 
 	// Capture HOME and set to tmpDir for manifest location control
 	home := os.Getenv("HOME")
@@ -138,7 +106,7 @@ func TestCmdHealthcheck_DetectsBraveManifest(t *testing.T) {
 	// Act - capture stdout to verify Brave is detected
 	// Note: This is a behavior test - we're checking that Brave manifests
 	// are properly detected during healthcheck
-	err = cmdHealthcheck(nil, nil)
+	err := cmdHealthcheck(nil, nil)
 
 	// Assert - The function should complete without panicking
 	// The actual Brave detection happens via GetBraveNativeMessagingDir()
@@ -161,18 +129,10 @@ func TestCmdHealthcheck_LabelFormatting(t *testing.T) {
 
 	// Arrange
 	tmpDir := t.TempDir()
-	originalDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get current directory: %v", err)
-	}
-	defer os.Chdir(originalDir)
-
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatalf("Failed to change directory: %v", err)
-	}
+	t.Chdir(tmpDir)
 
 	// Act - Run healthcheck (it may fail, but we're testing formatting)
-	err = cmdHealthcheck(nil, nil)
+	err := cmdHealthcheck(nil, nil)
 
 	// Assert - Should complete without crash
 	// The actual formatting is verified by visual inspection

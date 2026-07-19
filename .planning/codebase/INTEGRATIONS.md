@@ -1,6 +1,6 @@
 # External Integrations
 
-**Analysis Date:** 2026-02-23
+**Analysis Date:** 2026-07-19
 
 ## APIs & External Services
 **tmux:**
@@ -98,4 +98,4 @@
 - Zen Browser (Firefox-based, shares Firefox native messaging dirs)
 
 ---
-*Integration audit: 2026-02-23*
+*Integration audit: 2026-07-19*

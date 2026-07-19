@@ -1,18 +1,31 @@
 # Codebase Structure
 
-**Analysis Date:** 2026-02-23
+**Analysis Date:** 2026-07-19
 
 ## Directory Layout
-```
+```text
 devlog/
 ├── cmd/
 │   ├── devlog/                  # CLI binary entry point
-│   │   ├── main.go              # Command dispatcher + all subcommand implementations
+│   │   ├── main.go              # Command dispatcher + usage (112 lines)
+│   │   ├── cmd_attach.go        # `devlog attach`
+│   │   ├── cmd_down.go          # `devlog down`
+│   │   ├── cmd_healthcheck.go   # `devlog healthcheck`
+│   │   ├── cmd_init.go          # `devlog init`
+│   │   ├── cmd_ls.go            # `devlog ls`
+│   │   ├── cmd_open.go          # `devlog open`
+│   │   ├── cmd_register.go      # `devlog register`
+│   │   ├── cmd_status.go        # `devlog status`
+│   │   ├── cmd_up.go            # `devlog up`
+│   │   ├── helpers.go           # Shared helpers: findConfigFile, browser host wrapper
+│   │   ├── browser_wrapper_test.go  # Tests for wrapper lifecycle helpers
 │   │   ├── healthcheck_test.go  # Tests for healthcheck command
+│   │   ├── helpers_test.go      # Tests for helpers (findConfigFile, scripts, etc.)
 │   │   ├── init_test.go         # Tests for init command
 │   │   └── status_test.go       # Tests for status command
 │   └── devlog-host/             # Native messaging host binary
-│       └── main.go              # Stdin message loop → logger
+│       ├── main.go              # Stdin message loop → logger (100 lines)
+│       └── main_test.go         # Host loop tests with stream injection
 ├── internal/
 │   ├── config/                  # YAML config loading & validation
 │   │   ├── config.go            # Config types, Load(), Validate(), CleanupOldRuns()
@@ -29,24 +42,29 @@ devlog/
 │   └── logger/                  # Log file writer with level filtering
 │       ├── logger.go            # Logger struct, formatted line output
 │       └── logger_test.go       # Logger tests (323 lines)
-├── browser-extension/           # Browser extension (Chrome + Firefox)
+├── browser-extension/           # Browser extension (Chrome + Firefox share root assets)
 │   ├── background.js            # Service worker: native messaging port, message routing
 │   ├── content_script.js        # Content script: bridges page_inject ↔ background
 │   ├── page_inject.js           # Page-context script: wraps console.* methods
 │   ├── popup.html               # Extension popup UI
 │   ├── popup.js                 # Popup logic
 │   ├── icons/                   # Extension icons (SVG + PNG)
-│   ├── chrome/                  # Chrome-specific files
+│   ├── chrome/                  # Chrome-specific manifest only; shared assets via symlinks
 │   │   ├── manifest.json        # Manifest V3
-│   │   └── page_inject.js       # Chrome-specific page inject
-│   └── firefox/                 # Firefox-specific files
+│   │   ├── background.js → ../background.js
+│   │   ├── content_script.js → ../content_script.js
+│   │   ├── page_inject.js → ../page_inject.js
+│   │   ├── popup.html → ../popup.html
+│   │   ├── popup.js → ../popup.js
+│   │   └── icons → ../icons
+│   └── firefox/                 # Firefox-specific manifest only; shared assets via symlinks
 │       ├── manifest.json        # Manifest V2
-│       ├── background.js        # Firefox background script
-│       ├── content_script.js    # Firefox content script
-│       ├── page_inject.js       # Firefox page inject
-│       ├── popup.html           # Firefox popup
-│       ├── popup.js             # Firefox popup logic
-│       └── icons/               # Firefox icons
+│       ├── background.js → ../background.js
+│       ├── content_script.js → ../content_script.js
+│       ├── page_inject.js → ../page_inject.js
+│       ├── popup.html → ../popup.html
+│       ├── popup.js → ../popup.js
+│       └── icons → ../icons
 ├── doc/                         # Documentation
 │   ├── adr/                     # Architecture Decision Records (6 ADRs)
 │   ├── PUBLICATION_CHECKLIST.md # Extension store publication guide
@@ -74,14 +92,14 @@ devlog/
 ## Directory Purposes
 
 **`cmd/devlog/`:**
-- Purpose: Main CLI application — all user commands in a single file
-- Contains: Command dispatcher, 10 subcommand implementations, helper functions
-- Key files: `main.go` (862 lines — all CLI logic)
+- Purpose: Main CLI application — one command per file plus shared helpers
+- Contains: Command dispatcher (`main.go`), one `cmd_*.go` per subcommand, helper functions in `helpers.go`
+- Key files: `main.go` (112 lines — dispatcher + usage), `helpers.go` (findConfigFile, browser host wrapper, script generation), `cmd_up.go`/`cmd_down.go`/`cmd_register.go` (primary user-facing commands)
 
 **`cmd/devlog-host/`:**
 - Purpose: Standalone binary launched by browsers via native messaging
 - Contains: Message read loop that bridges native messaging → logger
-- Key files: `main.go` (86 lines)
+- Key files: `main.go` (100 lines), `main_test.go` (host loop tests with stream injection)
 
 **`internal/config/`:**
 - Purpose: YAML configuration parsing, validation, env var interpolation, log retention cleanup
@@ -141,9 +159,14 @@ devlog/
 - `internal/natmsg/natmsg_test.go`: Protocol encoding/decoding tests
 - `internal/natmsg/manifest_test.go`: Manifest generation tests
 - `internal/logger/logger_test.go`: Logger formatting and filtering tests
+- `internal/shellescape/shellescape_test.go`: Shell quoting tests
 - `cmd/devlog/healthcheck_test.go`: Healthcheck command tests
 - `cmd/devlog/init_test.go`: Init command tests
 - `cmd/devlog/status_test.go`: Status command tests
+- `cmd/devlog/helpers_test.go`: `findConfigFile`, script generation, sanitization tests
+- `cmd/devlog/browser_wrapper_test.go`: Browser host wrapper lifecycle tests
+- `cmd/devlog-host/main_test.go`: Host message loop tests with stream injection
+- `browser-extension/test/`: Vitest tests for `background.js`, `content_script.js`, `page_inject.js`
 
 ## Naming Conventions
 
@@ -166,10 +189,9 @@ devlog/
 ## Where to Add New Code
 
 **New CLI Command:**
-- Add handler function in `cmd/devlog/main.go`
-- Add to `commands` map in `cmd/devlog/main.go`
-- Add to `usage` string in `cmd/devlog/main.go`
-- Add tests in `cmd/devlog/<command>_test.go`
+- Add handler function in `cmd/devlog/cmd_<name>.go`
+- Add to `commands` map and `usage` string in `cmd/devlog/main.go`
+- Add tests in `cmd/devlog/<command>_test.go` (use `t.Chdir` for directory-scoped tests)
 
 **New Internal Package:**
 - Create `internal/<package>/` directory
@@ -177,9 +199,9 @@ devlog/
 - Add `*_test.go` colocated with source
 
 **New Browser Extension Feature:**
-- Chrome: modify files in `browser-extension/` (shared) or `browser-extension/chrome/`
-- Firefox: modify files in `browser-extension/firefox/`
-- Update `manifest.json` in both `chrome/` and `firefox/` directories
+- Modify shared root files in `browser-extension/` (used by both Chrome and Firefox via symlinks)
+- Update `manifest.json` in both `chrome/` and `firefox/` directories only if permissions or resources change
+- Packaging (`scripts/package-*.sh`) copies shared files from `browser-extension/` into the archive; do not duplicate assets in `chrome/` or `firefox/`
 
 **New Config Field:**
 - Add struct field with YAML tag in `internal/config/config.go`
@@ -205,4 +227,4 @@ devlog/
 - Contains: `ci.yml` (lint + test), `release.yml` (GoReleaser)
 
 ---
-*Structure analysis: 2026-02-23*
+*Structure analysis: 2026-07-19*

@@ -1,6 +1,6 @@
 # Coding Conventions
 
-**Analysis Date:** 2026-02-23
+**Analysis Date:** 2026-07-19
 
 ## Naming Patterns
 
@@ -157,4 +157,4 @@ if err != nil {
 - No dependency injection framework; manual wiring via constructors
 
 ---
-*Convention analysis: 2026-02-23*
+*Convention analysis: 2026-07-19*

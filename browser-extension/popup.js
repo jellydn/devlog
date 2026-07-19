@@ -18,8 +18,7 @@ document.addEventListener("DOMContentLoaded", () => {
 		} else if (response.enabled) {
 			statusEl.textContent = "Native host not connected";
 			statusEl.className = "status disabled";
-			footerEl.textContent =
-				"Run: devlog register --chrome --extension-id <EXTENSION_ID>";
+			footerEl.textContent = "Run: devlog register";
 			// Add troubleshooting link
 			const helpLink = document.createElement("a");
 			helpLink.href =

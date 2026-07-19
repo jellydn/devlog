@@ -1,60 +1,32 @@
 # Codebase Concerns
 
-**Analysis Date:** 2026-02-23
+**Analysis Date:** 2026-07-19
+**Prior audit:** 2026-02-23 (most items from that audit have since been resolved; see _Resolved_ traceability at the bottom)
+
+This document captures concerns that remain valid against the current codebase. Items already verified as fixed are listed in [_Resolved since the 2026-02-23 audit_](#resolved-since-the-2026-02-23-audit) for traceability.
 
 ## Tech Debt
 
-**Monolithic main.go (862 lines):** → [#27](https://github.com/jellydn/devlog/issues/27)
-- Issue: All CLI commands, helpers, and business logic live in a single file
-- Files: `cmd/devlog/main.go`
-- Impact: Hard to navigate, test individual commands, or add new commands cleanly
-- Fix approach: Extract each command into its own file (e.g., `cmd_up.go`, `cmd_down.go`) within the same package
-
-**Duplicated config types across packages:** → [#28](https://github.com/jellydn/devlog/issues/28)
-- Issue: `WindowConfig` and `PaneConfig` are defined in both `internal/config` and `internal/tmux` with identical structures, requiring manual mapping in `cmdUp`
-- Files: `internal/config/config.go:33-43`, `internal/tmux/tmux.go:347-357`, `cmd/devlog/main.go:258-271`
-- Impact: Changes to config structure require updating two type definitions and the mapping code
-- Fix approach: Have `tmux` package accept `config.WindowConfig`/`config.PaneConfig` directly, or extract shared types to a common package
-
-**Duplicated Chrome/Brave manifest install functions:** → [#14](https://github.com/jellydn/devlog/issues/14)
-- Issue: `InstallChromeManifest` and `InstallBraveManifest` are nearly identical—only the directory path differs
-- Files: `internal/natmsg/manifest.go:104-155`
-- Impact: Bug fixes or format changes must be applied to both functions
-- Fix approach: Extract a shared `installChromiumManifest(dir, hostPath, extensionID)` helper
-
 **Hardcoded `sleep 0.5` in session teardown:** → [#29](https://github.com/jellydn/devlog/issues/29)
-- Issue: `KillSession` sends `sleep 0.5` as a tmux command string to wait for graceful termination rather than using `time.Sleep` or a proper wait mechanism
+- Issue: `KillSession` sends `sleep 0.5` as a tmux command string to wait for graceful termination rather than using a proper wait mechanism
 - Files: `internal/tmux/tmux.go:204`
 - Impact: Unreliable timing; the sleep runs inside a pane shell, not in the Go process. Process may not be terminated before `kill-session` runs
 - Fix approach: Use `time.Sleep(500 * time.Millisecond)` in the Go process between Ctrl+C rounds
+- Status (2026-07-19): Partially addressed — the Go process now calls `time.Sleep(500 * time.Millisecond)` (see `internal/tmux/tmux.go:208`) with a comment explaining why the tmux `sleep` was unreliable. The graceful-shutdown mechanism still relies on `C-c` responsiveness; a configurable grace period would still be an improvement.
 
 ## Known Bugs
 
-**Tests use `os.Chdir` without `t.Parallel()` safety:**
-- Symptoms: Tests that change working directory with `os.Chdir` can interfere with each other if run in parallel
-- Files: `cmd/devlog/init_test.go:12-18,67-73,125-131`, `cmd/devlog/healthcheck_test.go:13-19,36-42,72-78,99-105,164-170`
-- Trigger: Running tests with `-parallel` or if Go decides to interleave tests
-- Workaround: Tests currently use `defer os.Chdir(originalDir)` but this is process-global state. Use `t.Chdir()` (Go 1.24+) or restructure to avoid `os.Chdir`
+_None confirmed against the current codebase._
 
-**Firefox manifest UUID guard is a no-op:**
-- Symptoms: The conditional block for UUID-format extension IDs does the same thing as the default case
-- Files: `internal/natmsg/manifest.go:162-169`
-- Trigger: Passing a UUID-format extension ID like `{abc-def-...}`
-- Workaround: None needed functionally, but the dead code is misleading
+The 2026-02-23 audit listed two known bugs (`os.Chdir` test interference and the dead Firefox UUID guard). Both are resolved — see the traceability section below.
 
 ## Security Considerations
 
 **Shell command injection surface via config values:**
-- Risk: Pane commands from `devlog.yml` are passed to `sh -lc` with single-quote escaping. Session names and window names are passed directly to `tmux` CLI arguments without validation
-- Files: `internal/tmux/tmux.go:50,122,146,175-176`, `internal/config/config.go:84-116`
-- Current mitigation: Single-quote shell escaping for commands (`tmux.go:175`), path quoting for pipe-pane (`tmux.go:165`), `shellQuote` in wrapper script (`main.go:746-751`)
-- Recommendations: Validate session/window names against allowed characters (alphanumeric, dash, underscore). The config file is user-controlled so risk is low, but defense-in-depth is good practice
-
-**Native messaging manifest writes with world-readable permissions (0644):**
-- Risk: Manifest files contain the path to the host binary; a local attacker could read these to understand the system
-- Files: `internal/natmsg/manifest.go:124,150,189`
-- Current mitigation: The binary path is not secret; this is standard for native messaging
-- Recommendations: Low risk, acceptable as-is
+- Risk: Pane commands from `devlog.yml` are passed to `sh -lc` via the tested `internal/shellescape` package. Session and window names are passed directly to `tmux` CLI arguments without character validation
+- Files: `internal/tmux/tmux.go:170,179`, `internal/shellescape/`, `internal/config/config.go:84-116`
+- Current mitigation: `shellescape.Quote` for commands and pipe paths (centralized and unit-tested); the config file is user-controlled so risk is low
+- Recommendations: Defense-in-depth — validate session/window names against allowed characters (alphanumeric, dash, underscore) in `config.Validate()` to reject names that break tmux's `session:window` targeting before they reach the CLI
 
 **Environment variable interpolation in config:**
 - Risk: Config files can reference any environment variable via `$VAR` / `${VAR}`, which could expose sensitive values in log paths if misconfigured
@@ -68,7 +40,7 @@
 - Problem: Each window/pane creation issues separate `exec.Command("tmux", ...)` calls synchronously
 - Files: `internal/tmux/tmux.go:50-87,120-142`
 - Cause: Each pane setup involves 2-3 sequential subprocess calls (new-window/split, pipe-pane, send-keys)
-- Improvement path: Not a real bottleneck for typical use (2-5 windows), but for large configs (10+ windows), could batch via `tmux source-file` with a generated config
+- Improvement path: Not a real bottleneck for typical use (2-5 windows). For large configs (10+ windows), could batch via `tmux source-file` with a generated config
 
 **`CleanupOldRuns` reads all directory entries:**
 - Problem: Reads entire logs directory listing, gets `Info()` for each entry, then sorts
@@ -80,21 +52,16 @@
 
 **`KillSession` graceful shutdown timing:** → [#29](https://github.com/jellydn/devlog/issues/29)
 - Files: `internal/tmux/tmux.go:186-220`
-- Why fragile: Relies on sending `C-c` twice with a `sleep 0.5` tmux command between them. If processes don't respond to `SIGINT`, they won't terminate gracefully. The sleep happens in a tmux pane, not the Go process, so timing is non-deterministic
-- Safe modification: Replace the tmux `sleep` with `time.Sleep` in Go; consider adding a configurable grace period
+- Why fragile: Relies on sending `C-c` twice with a `time.Sleep` between them in the Go process. If processes don't respond to `SIGINT`, they won't terminate gracefully
+- Safe modification: Add a configurable grace period and consider `SIGTERM`/`SIGKILL` escalation
 - Test coverage: Covered by integration tests (build-tag gated), not by unit tests
 
-**`findConfigFile` upward directory walk:**
-- Files: `cmd/devlog/main.go:116-138`
-- Why fragile: Walks up to filesystem root looking for `devlog.yml`. If run from `/` or a deeply nested path, it traverses many directories. Also depends on `os.Getwd()` which can fail in edge cases (deleted CWD)
-- Safe modification: Add a maximum depth limit or stop at home directory
-- Test coverage: No direct tests for this function
-
 **`writeBrowserHostWrapper` / `restoreBrowserHostWrapper` manifest lifecycle:**
-- Files: `cmd/devlog/main.go:694-741`
+- Files: `cmd/devlog/helpers.go:100-153,225-249`
 - Why fragile: On `devlog up`, it overwrites all native messaging manifests to point to a session-specific wrapper script. On `devlog down`, it restores them. If the process crashes between up and down, manifests are left pointing to a wrapper that references a stale log path
-- Safe modification: Add a startup check to verify manifest integrity
-- Test coverage: No tests for these functions
+- Mitigation now in place: `natmsg.RepairStaleManifestPaths` self-heals stale/missing manifest paths on the next `devlog up`, and `refuseClobberActiveWrapper` guards against overwriting a live session's wrapper
+- Test coverage: `cmd/devlog/browser_wrapper_test.go` covers the testable core (`writeBrowserHostWrapperWithHost`, `restoreBrowserHostWrapperWithHost`)
+- Remaining improvement: A dedicated startup integrity check command could surface stale state without requiring a full `devlog up`
 
 ## Scaling Limits
 
@@ -140,35 +107,55 @@
 - Blocks: Windows users entirely (WSL would work but is not documented)
 
 **No config validation for window/pane names:**
-- Problem: Window names with special characters (spaces, colons, periods) can break tmux targeting (`session:window` format)
+- Problem: Window names with special characters (spaces, colons, periods) can break tmux targeting (`session:window` format). `config.Validate()` checks required fields, run mode, and numeric bounds, but not name character sets
 - Blocks: Users with non-alphanumeric window names may get confusing errors
-- Files: `internal/config/config.go:84-116`
+- Files: `internal/config/config.go:83-115`
+- Fix approach: Add a name-character allow-list check inside the `Validate()` loop over windows/panes
 
 ## Test Coverage Gaps
 
-**`cmd/devlog/main.go` — most command functions untested:** → [#27](https://github.com/jellydn/devlog/issues/27)
-- What's not tested: `cmdUp`, `cmdDown`, `cmdAttach`, `cmdStatus`, `cmdLs`, `cmdOpen`, `cmdRegister`, `findConfigFile`, `writeBrowserHostWrapper`, `restoreBrowserHostWrapper`, `shellQuote`, `sanitizeSessionForFileName`, `openInFileManager`
-- Files: `cmd/devlog/main.go`
-- Risk: The largest file (862 lines) with the most user-facing logic has the least test coverage. Only `cmdInit`, `cmdHealthcheck`, `resolveStatusLogsDir`, `ensureFileExists` are tested
-- Priority: **High** — core CLI commands are the primary user interface
-
-**`cmd/devlog-host/main.go` — no tests at all:** → [#30](https://github.com/jellydn/devlog/issues/30)
-- What's not tested: The entire native messaging host binary entry point
-- Files: `cmd/devlog-host/main.go`
-- Risk: Message processing loop and error handling are untested (though underlying `natmsg` and `logger` packages are well-tested)
-- Priority: **Medium** — the components it uses are tested, but integration behavior is not
-
-**No `t.Parallel()` usage in any test:**
-- What's not tested: Test parallelism correctness
-- Files: All `*_test.go` files
-- Risk: Tests run sequentially, hiding potential race conditions. Several tests mutate global state (`os.Chdir`) which would break under parallel execution
-- Priority: **Low** — not a coverage gap per se, but indicates fragility
+**`cmd/devlog` command coverage still uneven:** → [#27](https://github.com/jellydn/devlog/issues/27)
+- What's tested now: `cmdInit`, `cmdHealthcheck`, `findConfigFile`, `sanitizeSessionForFileName`, `generateShellScript`/`generateBatchScript`, `writeBrowserHostWrapperWithHost`, `restoreBrowserHostWrapperWithHost`, `refuseClobberActiveWrapper`, `resolveStatusLogsDir`, `ensureFileExists`
+- What's still not tested directly: `cmdUp`, `cmdDown`, `cmdAttach`, `cmdStatus`, `cmdLs`, `cmdOpen`, `cmdRegister`
+- Files: `cmd/devlog/cmd_*.go`
+- Risk: The user-facing command surface (`cmdUp`/`cmdDown`/`cmdRegister`) is exercised only via integration tests requiring live tmux
+- Priority: **Medium** — the testable helper cores are now covered; the remaining gap is the command orchestration layer
 
 **`tmux.Runner` methods not unit-tested in isolation:**
 - What's not tested: `CreateSession`, `KillSession`, `GetSessionInfo`, `GetLogsDir` are only tested via integration tests requiring a live tmux server
 - Files: `internal/tmux/tmux.go`, `internal/tmux/tmux_test.go`, `internal/tmux/integration_test.go`
-- Risk: Integration tests are skipped with `-short` and require tmux, so CI may not run them. The `tmux_test.go` unit tests (9 functions) only cover `SessionExists` and basic operations
+- Risk: Integration tests are skipped with `-short` and require tmux, so CI may not run them. The `tmux_test.go` unit tests only cover `SessionExists` and basic operations
 - Priority: **Medium** — consider adding a tmux command executor interface for mockable unit tests
 
+**No `t.Parallel()` usage in any test:**
+- What's not tested: Test parallelism correctness
+- Files: All `*_test.go` files
+- Risk: Tests run sequentially. The previous `os.Chdir` global-state hazard is gone (tests now use `t.Chdir`), so parallel execution is now safe to introduce, but no test opts in
+- Priority: **Low** — not a coverage gap per se; safe to enable opportunistically per-package
+
+## Browser Extension
+
+**Firefox extension no longer diverges from shared root assets:**
+- Resolved (2026-07-19): `browser-extension/firefox/` now mirrors `browser-extension/chrome/` — `background.js`, `content_script.js`, `popup.html`, `popup.js`, `page_inject.js`, and `icons/` are symlinks to the shared root files. Only `manifest.json` differs (MV2 vs MV3). `scripts/package-firefox.sh` now copies shared files from `browser-extension/` (the canonical source) like `package-chrome.sh`, so the archive never depends on symlink resolution. The root `popup.js` help text is browser-generic (`Run: devlog register`) and `page_inject.js` symlinks were added to both `chrome/` and `firefox/` so unpacked dev loading resolves all manifest-referenced files.
+- Verification: Both `package-chrome.sh` and `package-firefox.sh` produce archives containing `manifest.json`, `background.js`, `content_script.js`, `page_inject.js`, `popup.html`, `popup.js`, and all four PNG icons.
+
+## Resolved since the 2026-02-23 audit
+
+| Concern (2026-02-23) | Resolution | Verification |
+| --- | --- | --- |
+| Monolithic `cmd/devlog/main.go` (862 lines) [#27] | Commands split into `cmd/devlog/cmd_*.go`; `main.go` now 112 lines | `wc -l cmd/devlog/main.go` |
+| Duplicated `WindowConfig`/`PaneConfig` across `internal/config` and `internal/tmux` [#28] | `internal/tmux` imports `internal/config`; types defined once in `internal/config/config.go:34-43` | `rg 'type (Window\|Pane)Config' internal/` |
+| Duplicated Chrome/Brave manifest install functions [#14] | Extracted `installChromiumManifest(dir, hostPath, extensionID, label)` helper in `internal/natmsg/manifest.go:106`; both `InstallChromeManifest` and `InstallBraveManifest` delegate to it | `go test ./internal/natmsg/` green |
+| Hardcoded `sleep 0.5` in `KillSession` [#29] | Replaced with `time.Sleep(500 * time.Millisecond)` in the Go process (`internal/tmux/tmux.go:208`) | `rg 'time.Sleep\|sleep 0\.5' internal/tmux/tmux.go` |
+| Tests use `os.Chdir` (process-global, unsafe under parallel) | Converted to `t.Chdir` (Go 1.24+) in `cmd/devlog/init_test.go` and `cmd/devlog/healthcheck_test.go` | `rg 'os\.Chdir' cmd/devlog/*_test.go` returns no matches |
+| Firefox manifest UUID guard was a no-op | Dead `strings.HasPrefix` branch removed; `allowedExts := []string{extensionID}` retained with explanatory comment in `internal/natmsg/manifest.go` | `go test ./internal/natmsg/` green |
+| `findConfigFile` unbounded upward walk, no tests | Bounded to `maxFindConfigDepth = 20` (`cmd/devlog/helpers.go:18`); tests added in `cmd/devlog/helpers_test.go` covering current-dir, ancestor, and beyond-depth cases | `go test -run TestFindConfigFile ./cmd/devlog/` green |
+| Shell quoting scattered/untested | Centralized in `internal/shellescape` package with unit tests; used by `internal/tmux` and `cmd/devlog/helpers.go` | `go test ./internal/shellescape/` green |
+| Native messaging manifest writes were world-readable (0644) | All manifest writes now use `0600` (owner-only) in `internal/natmsg/manifest.go:128,174,214,371` | `rg 'WriteFile.*0[0-9]{3}' internal/natmsg/manifest.go` |
+| `cmd/devlog-host/main.go` had no tests | `cmd/devlog-host/main_test.go` added; host loop testable via stream injection | `go test ./cmd/devlog-host/` green |
+| `writeBrowserHostWrapper`/`restoreBrowserHostWrapper` untested | Split into testable `*WithHost` cores in `cmd/devlog/helpers.go`; covered by `cmd/devlog/browser_wrapper_test.go` | `go test ./cmd/devlog/` green |
+| Manifest lifecycle fragility (stale wrapper after crash) | `natmsg.RepairStaleManifestPaths` self-heals stale/missing manifest paths on next `devlog up`; `refuseClobberActiveWrapper` guards live wrappers | `rg 'RepairStaleManifestPaths' internal/natmsg/manifest.go` |
+| Firefox extension diverged from shared root assets | Firefox directory now uses symlinks to shared root files; `package-firefox.sh` copies from canonical source; `page_inject.js` symlink added to both browsers | `unzip -l dist/devlog-firefox-*.zip` lists all manifest-referenced files |
+
 ---
-*Concerns audit: 2026-02-23*
+*Concerns audit: 2026-07-19*

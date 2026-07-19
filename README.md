@@ -144,6 +144,36 @@ devlog up
 
 `devlog up` will error if a session is already running. Use `devlog down` first.
 
+## For AI Agents
+
+To set up devlog in a project you are working in, run these steps in order:
+
+```sh
+# 1. Install both binaries (requires Go 1.25+)
+go install github.com/jellydn/devlog/cmd/devlog@latest
+go install github.com/jellydn/devlog/cmd/devlog-host@latest
+
+# 2. Scaffold a devlog.yml in the current project
+devlog init
+
+# 3. Edit devlog.yml: set tmux.session, windows/panes with cmd + log paths,
+#    and the browser block if console capture is wanted (see Quick Start above).
+
+# 4. Verify toolchain (tmux, host binary, extension registration)
+devlog healthcheck
+
+# 5. Start capturing
+devlog up
+```
+
+Notes for agents:
+
+- `devlog up` is idempotency-safe only against a missing session — it **errors if a session is already running**. Call `devlog down` first when re-running.
+- Integration/end-to-end log capture needs `tmux` on PATH. The `healthcheck` command confirms it before you start.
+- Browser console capture requires the native host to be registered (`devlog register --chrome --extension-id <ID>` or `--firefox`) and the extension loaded; skip the `browser` block if you only need server logs.
+- Logs land under `logs_dir` (default `./logs`). Prefer `devlog down` (not killing tmux manually) so logs flush and the manifest `path` restores to the real `devlog-host` binary.
+- Config supports `$VAR` / `${VAR}` interpolation, so you can read ports/paths from the environment.
+
 ## Log Output
 
 ### Directory Structure

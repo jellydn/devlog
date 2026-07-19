@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -78,5 +80,70 @@ func TestBatchQuote(t *testing.T) {
 	}
 	if batchQuote(`say "hi"`) != `"say ""hi"""` {
 		t.Errorf("batchQuote quotes = %q", batchQuote(`say "hi"`))
+	}
+}
+
+func TestFindConfigFile_InCurrentDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	configPath := filepath.Join(tmpDir, "devlog.yml")
+	if err := os.WriteFile(configPath, []byte("version: \"1\"\n"), 0644); err != nil {
+		t.Fatalf("Failed to write devlog.yml: %v", err)
+	}
+
+	got := findConfigFile()
+	if got != configPath {
+		t.Errorf("findConfigFile() = %q, want %q", got, configPath)
+	}
+}
+
+func TestFindConfigFile_InAncestor(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "devlog.yml")
+	if err := os.WriteFile(configPath, []byte("version: \"1\"\n"), 0644); err != nil {
+		t.Fatalf("Failed to write devlog.yml: %v", err)
+	}
+
+	// Nest three levels below tmpDir; the config two levels up should still resolve.
+	nested := filepath.Join(tmpDir, "a", "b", "c")
+	if err := os.MkdirAll(nested, 0755); err != nil {
+		t.Fatalf("Failed to create nested dirs: %v", err)
+	}
+	t.Chdir(nested)
+
+	got := findConfigFile()
+	if got != configPath {
+		t.Errorf("findConfigFile() = %q, want %q", got, configPath)
+	}
+}
+
+// TestFindConfigFile_BoundedDepth verifies the upward walk stops at maxFindConfigDepth.
+// We place devlog.yml only at the top of a deep tree, then chdir deeper than the limit.
+// The walk must exhaust its budget before reaching the config and return "".
+func TestFindConfigFile_BoundedDepth(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "devlog.yml")
+	if err := os.WriteFile(configPath, []byte("version: \"1\"\n"), 0644); err != nil {
+		t.Fatalf("Failed to write devlog.yml: %v", err)
+	}
+
+	// Build a tree deeper than maxFindConfigDepth so the config at tmpDir is
+	// out of reach from the deepest directory.
+	segments := make([]string, 0, maxFindConfigDepth+5)
+	current := tmpDir
+	for i := 1; i <= maxFindConfigDepth+5; i++ {
+		current = filepath.Join(current, fmt.Sprintf("d%02d", i))
+		segments = append(segments, current)
+	}
+	deepest := segments[len(segments)-1]
+	if err := os.MkdirAll(deepest, 0755); err != nil {
+		t.Fatalf("Failed to create deep nesting: %v", err)
+	}
+	t.Chdir(deepest)
+
+	got := findConfigFile()
+	if got != "" {
+		t.Errorf("findConfigFile() = %q, want empty (config should be beyond maxFindConfigDepth)", got)
 	}
 }

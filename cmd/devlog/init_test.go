@@ -9,17 +9,9 @@ import (
 
 func TestCmdInit_CreatesFile(t *testing.T) {
 	tmpDir := t.TempDir()
-	originalDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get current directory: %v", err)
-	}
-	defer os.Chdir(originalDir)
+	t.Chdir(tmpDir)
 
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatalf("Failed to change directory: %v", err)
-	}
-
-	err = cmdInit(nil, nil)
+	err := cmdInit(nil, nil)
 	if err != nil {
 		t.Fatalf("cmdInit() failed: %v", err)
 	}
@@ -64,15 +56,7 @@ func TestCmdInit_CreatesFile(t *testing.T) {
 
 func TestCmdInit_FileAlreadyExists(t *testing.T) {
 	tmpDir := t.TempDir()
-	originalDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get current directory: %v", err)
-	}
-	defer os.Chdir(originalDir)
-
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatalf("Failed to change directory: %v", err)
-	}
+	t.Chdir(tmpDir)
 
 	// Create an existing devlog.yml
 	configPath := filepath.Join(tmpDir, "devlog.yml")
@@ -81,7 +65,7 @@ func TestCmdInit_FileAlreadyExists(t *testing.T) {
 	}
 
 	// Try to init again
-	err = cmdInit(nil, nil)
+	err := cmdInit(nil, nil)
 	if err == nil {
 		t.Fatal("cmdInit() should have failed with existing file")
 	}
@@ -122,15 +106,7 @@ func TestCmdInit_MonorepoDetection(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
-			originalDir, err := os.Getwd()
-			if err != nil {
-				t.Fatalf("Failed to get current directory: %v", err)
-			}
-			defer os.Chdir(originalDir)
-
-			if err := os.Chdir(tmpDir); err != nil {
-				t.Fatalf("Failed to change directory: %v", err)
-			}
+			t.Chdir(tmpDir)
 
 			// Create monorepo indicator directory if specified
 			if tt.createDir != "" {
@@ -139,7 +115,7 @@ func TestCmdInit_MonorepoDetection(t *testing.T) {
 				}
 			}
 
-			err = cmdInit(nil, nil)
+			err := cmdInit(nil, nil)
 			if err != nil {
 				t.Fatalf("cmdInit() failed: %v", err)
 			}

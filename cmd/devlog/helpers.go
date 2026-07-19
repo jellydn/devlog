@@ -12,13 +12,18 @@ import (
 	"github.com/jellydn/devlog/internal/tmux"
 )
 
+// maxFindConfigDepth limits how far findConfigFile walks up the directory tree.
+// 20 levels is generous for any realistic project nesting while preventing a
+// walk all the way to the filesystem root when invoked from an unrelated path.
+const maxFindConfigDepth = 20
+
 func findConfigFile() string {
 	dir, err := os.Getwd()
 	if err != nil {
 		return ""
 	}
 
-	for {
+	for depth := 0; depth < maxFindConfigDepth; depth++ {
 		configPath := filepath.Join(dir, "devlog.yml")
 		if _, err := os.Stat(configPath); err == nil {
 			return configPath

@@ -82,6 +82,7 @@ jobs:
   multi-platform:
     name: Build verification (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
@@ -99,7 +100,19 @@ jobs:
 
       - name: Install tmux (macOS)
         if: runner.os == 'macOS'
-        run: brew install tmux
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+        run: |
+          # Retry up to 3 times — Homebrew downloads occasionally time out on CI.
+          for i in 1 2 3; do
+            echo "Attempt $i: installing tmux..."
+            brew install tmux && exit 0
+            echo "Attempt $i failed, waiting 10s before retry..."
+            sleep 10
+          done
+          echo "brew install tmux failed after 3 attempts"
+          exit 1
 
       - name: Check formatting
         shell: bash

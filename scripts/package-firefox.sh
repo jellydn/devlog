@@ -30,12 +30,13 @@ echo "Building extension in $BUILD_DIR..."
 # Copy Firefox-specific manifest
 cp "$FIREFOX_DIR/manifest.json" "$BUILD_DIR/"
 
-# Copy Firefox-specific files
-cp "$FIREFOX_DIR/background.js" "$BUILD_DIR/"
-cp "$FIREFOX_DIR/content_script.js" "$BUILD_DIR/"
+# Copy shared files (Firefox directory holds symlinks to these; package from the
+# canonical source so the archive never depends on symlink resolution).
+cp "$EXTENSION_DIR/background.js" "$BUILD_DIR/"
+cp "$EXTENSION_DIR/content_script.js" "$BUILD_DIR/"
 cp "$EXTENSION_DIR/page_inject.js" "$BUILD_DIR/"
-cp "$FIREFOX_DIR/popup.html" "$BUILD_DIR/"
-cp "$FIREFOX_DIR/popup.js" "$BUILD_DIR/"
+cp "$EXTENSION_DIR/popup.html" "$BUILD_DIR/"
+cp "$EXTENSION_DIR/popup.js" "$BUILD_DIR/"
 
 # Copy icons
 mkdir -p "$BUILD_DIR/icons"

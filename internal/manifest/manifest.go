@@ -1,3 +1,6 @@
+// Package manifest manages browser native messaging host registration:
+// installing, updating, and repairing manifest JSON files for Chrome,
+// Brave, Firefox, and Zen browsers.
 package manifest
 
 import (

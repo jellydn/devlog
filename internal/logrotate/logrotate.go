@@ -1,3 +1,5 @@
+// Package logrotate handles cleanup of old timestamped log directories
+// based on configurable retention policies (max runs and retention days).
 package logrotate
 
 import (

@@ -11,6 +11,8 @@
 
 Zero-code log capture for local development. Captures server logs via tmux and browser console logs via a native messaging host — all controlled by a single YAML config.
 
+📖 **Project site:** https://jellydn.github.io/devlog/
+
 ## Features
 
 - **tmux log capture** — automatically creates sessions, runs dev commands, and captures stdout/stderr to log files

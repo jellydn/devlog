@@ -2,12 +2,10 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
+	"github.com/jellydn/devlog/internal/browsersession"
 	"github.com/jellydn/devlog/internal/config"
-	"github.com/jellydn/devlog/internal/manifest"
 	"github.com/jellydn/devlog/internal/tmux"
 )
 
@@ -32,58 +30,27 @@ func cmdHealthcheck(cfg *config.Config, args []string) error {
 		fmt.Printf("✓ %s\n", version)
 	}
 
+	bs := browsersession.New(manifestAdapter{}, tmuxSessionChecker{})
+	result, err := bs.HealthCheck()
+	if err != nil {
+		return fmt.Errorf("browser healthcheck failed: %w", err)
+	}
+
 	// Check devlog-host binary
 	fmt.Printf("%-*s ", maxLabelLen, "devlog-host binary:")
-	var hostPath string
-	hostPath, err = manifest.FindDevlogHostBinary()
-	if err != nil {
+	if !result.HostFound {
 		fmt.Println("✗ NOT FOUND")
 		fmt.Println("  devlog-host is required for browser logging.")
 		fmt.Println("  Install: go install github.com/jellydn/devlog/cmd/devlog-host@latest")
 		allGood = false
 	} else {
-		fmt.Printf("✓ %s\n", hostPath)
+		fmt.Printf("✓ %s\n", result.HostPath)
 	}
 
 	// Check native messaging manifests
 	fmt.Printf("%-*s ", maxLabelLen, "Browser extension:")
-	chromeManifestPath := filepath.Join(manifest.GetChromeNativeMessagingDir(), "com.devlog.host.json")
-	braveManifestPath := filepath.Join(manifest.GetBraveNativeMessagingDir(), "com.devlog.host.json")
-	firefoxManifestPaths := []string{}
-	for _, dir := range manifest.GetFirefoxNativeMessagingDirs() {
-		firefoxManifestPaths = append(firefoxManifestPaths, filepath.Join(dir, "com.devlog.host.json"))
-	}
-
-	chromeRegistered := false
-	if _, err := os.Stat(chromeManifestPath); err == nil {
-		chromeRegistered = true
-	}
-
-	braveRegistered := false
-	if _, err := os.Stat(braveManifestPath); err == nil {
-		braveRegistered = true
-	}
-
-	firefoxRegistered := false
-	for _, path := range firefoxManifestPaths {
-		if _, err := os.Stat(path); err == nil {
-			firefoxRegistered = true
-			break
-		}
-	}
-
-	if chromeRegistered || braveRegistered || firefoxRegistered {
-		registered := []string{}
-		if chromeRegistered {
-			registered = append(registered, "Chrome")
-		}
-		if braveRegistered {
-			registered = append(registered, "Brave")
-		}
-		if firefoxRegistered {
-			registered = append(registered, "Firefox")
-		}
-		fmt.Printf("✓ Registered for %s\n", strings.Join(registered, ", "))
+	if len(result.Registered) > 0 {
+		fmt.Printf("✓ Registered for %s\n", strings.Join(result.Registered, ", "))
 	} else {
 		fmt.Println("✗ NOT REGISTERED")
 		fmt.Println("  Browser extension is not registered.")
@@ -95,30 +62,19 @@ func cmdHealthcheck(cfg *config.Config, args []string) error {
 
 	// Check that manifest path targets exist on disk (self-heal when possible)
 	fmt.Printf("%-*s ", maxLabelLen, "Manifest host path:")
-	if hostPath != "" {
-		if repaired, err := manifest.RepairStaleManifestPaths(hostPath); err == nil && repaired > 0 {
-			fmt.Printf("✓ repaired %d stale path(s)\n", repaired)
-		}
+	if result.HostFound && result.RepairedPaths > 0 {
+		fmt.Printf("✓ repaired %d stale path(s)\n", result.RepairedPaths)
 	}
-	paths, pathErr := manifest.ReadManifestPaths()
-	if pathErr != nil && len(paths) == 0 {
+	if result.ManifestPaths == 0 {
+		// Match prior behavior: when no paths and repair already printed a line,
+		// still report "none installed" on its own line.
 		fmt.Println("○ none installed")
+	} else if result.StalePaths > 0 {
+		fmt.Printf("✗ %d path(s) missing on disk\n", result.StalePaths)
+		fmt.Println("  Run: devlog up  (or re-register) to repair")
+		allGood = false
 	} else {
-		stale := 0
-		for _, p := range paths {
-			if _, err := os.Stat(p); err != nil {
-				stale++
-			}
-		}
-		if stale > 0 {
-			fmt.Printf("✗ %d path(s) missing on disk\n", stale)
-			fmt.Println("  Run: devlog up  (or re-register) to repair")
-			allGood = false
-		} else if len(paths) == 0 {
-			fmt.Println("○ none installed")
-		} else {
-			fmt.Printf("✓ %d path(s) exist\n", len(paths))
-		}
+		fmt.Printf("✓ %d path(s) exist\n", result.ManifestPaths)
 	}
 
 	fmt.Println()

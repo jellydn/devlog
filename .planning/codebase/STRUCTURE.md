@@ -3,7 +3,7 @@
 **Analysis Date:** 2026-07-19
 
 ## Directory Layout
-```
+```text
 devlog/
 ├── cmd/
 │   ├── devlog/                  # CLI binary entry point

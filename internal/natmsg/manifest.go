@@ -104,6 +104,9 @@ func getFirefoxDirs() []string {
 // installChromiumManifest writes a Chromium-style native messaging manifest (used by
 // Chrome and Brave) into dir. The label is used for error messages only.
 func installChromiumManifest(dir, hostPath, extensionID, label string) error {
+	if extensionID == "" {
+		return fmt.Errorf("%s extension ID is required", label)
+	}
 	if err := ValidateHostPath(hostPath); err != nil {
 		return err
 	}
@@ -145,6 +148,9 @@ func InstallFirefoxManifest(hostPath string) error {
 }
 
 func InstallFirefoxManifestWithID(hostPath string, extensionID string) error {
+	if extensionID == "" {
+		return fmt.Errorf("Firefox extension ID is required")
+	}
 	if err := ValidateHostPath(hostPath); err != nil {
 		return err
 	}

@@ -173,6 +173,54 @@ func TestInstallBraveManifest_MissingHostPath(t *testing.T) {
 	}
 }
 
+func TestInstallChromeManifest_EmptyExtensionID(t *testing.T) {
+	tmpDir := t.TempDir()
+	hostPath := filepath.Join(tmpDir, "devlog-host")
+	if err := os.WriteFile(hostPath, []byte("#! fake"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	err := InstallChromeManifest(hostPath, "")
+	if err == nil {
+		t.Fatal("expected error for empty extension ID, got nil")
+	}
+	if !strings.Contains(err.Error(), "extension ID") {
+		t.Errorf("error = %q, want message mentioning extension ID", err.Error())
+	}
+}
+
+func TestInstallBraveManifest_EmptyExtensionID(t *testing.T) {
+	tmpDir := t.TempDir()
+	hostPath := filepath.Join(tmpDir, "devlog-host")
+	if err := os.WriteFile(hostPath, []byte("#! fake"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	err := InstallBraveManifest(hostPath, "")
+	if err == nil {
+		t.Fatal("expected error for empty extension ID, got nil")
+	}
+	if !strings.Contains(err.Error(), "extension ID") {
+		t.Errorf("error = %q, want message mentioning extension ID", err.Error())
+	}
+}
+
+func TestInstallFirefoxManifestWithID_EmptyExtensionID(t *testing.T) {
+	tmpDir := t.TempDir()
+	hostPath := filepath.Join(tmpDir, "devlog-host")
+	if err := os.WriteFile(hostPath, []byte("#! fake"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	err := InstallFirefoxManifestWithID(hostPath, "")
+	if err == nil {
+		t.Fatal("expected error for empty extension ID, got nil")
+	}
+	if !strings.Contains(err.Error(), "extension ID") {
+		t.Errorf("error = %q, want message mentioning extension ID", err.Error())
+	}
+}
+
 func TestInstallBraveManifest_ManifestMode0600(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("file mode bits not meaningful on Windows")

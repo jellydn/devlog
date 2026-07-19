@@ -288,31 +288,6 @@ tmux:
 	}
 }
 
-func TestConfig_ResolveLogsDir_Timestamped(t *testing.T) {
-	cfg := &Config{
-		LogsDir: "./logs",
-		RunMode: "timestamped",
-	}
-
-	dir := cfg.ResolveLogsDir()
-	expectedPrefix := filepath.Join("logs", "")
-	if !strings.HasPrefix(dir, expectedPrefix) {
-		t.Errorf("ResolveLogsDir() = %q, want prefix %q", dir, expectedPrefix)
-	}
-}
-
-func TestConfig_ResolveLogsDir_Overwrite(t *testing.T) {
-	cfg := &Config{
-		LogsDir: "./logs",
-		RunMode: "overwrite",
-	}
-
-	dir := cfg.ResolveLogsDir()
-	if dir != "./logs" {
-		t.Errorf("ResolveLogsDir() = %q, want %q", dir, "./logs")
-	}
-}
-
 func TestLoad_RetentionConfig(t *testing.T) {
 	content := `
 version: "1.0"

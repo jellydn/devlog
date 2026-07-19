@@ -56,7 +56,7 @@ func TestTmuxIntegration_CreateSession(t *testing.T) {
 	}
 
 	tmpDir := t.TempDir()
-	if err := runner.CreateSession(tmpDir, windows); err != nil {
+	if err := runner.CreateSession(SessionConfig{LogsDir: tmpDir, RunMode: "overwrite", Windows: windows}); err != nil {
 		t.Fatalf("failed to create session: %v", err)
 	}
 
@@ -112,7 +112,7 @@ func TestTmuxIntegration_MultipleWindowsAndPanes(t *testing.T) {
 		},
 	}
 
-	if err := runner.CreateSession(tmpDir, windows); err != nil {
+	if err := runner.CreateSession(SessionConfig{LogsDir: tmpDir, RunMode: "overwrite", Windows: windows}); err != nil {
 		t.Fatalf("CreateSession failed: %v", err)
 	}
 
@@ -186,7 +186,7 @@ func TestTmuxIntegration_LogCapture(t *testing.T) {
 		},
 	}
 
-	if err := runner.CreateSession(tmpDir, windows); err != nil {
+	if err := runner.CreateSession(SessionConfig{LogsDir: tmpDir, RunMode: "overwrite", Windows: windows}); err != nil {
 		t.Fatalf("CreateSession failed: %v", err)
 	}
 
@@ -229,7 +229,7 @@ func TestTmuxIntegration_SessionLifecycle(t *testing.T) {
 	}
 
 	// Create session
-	if err := runner.CreateSession(tmpDir, windows); err != nil {
+	if err := runner.CreateSession(SessionConfig{LogsDir: tmpDir, RunMode: "overwrite", Windows: windows}); err != nil {
 		t.Fatalf("CreateSession failed: %v", err)
 	}
 
@@ -289,12 +289,12 @@ func TestTmuxIntegration_DuplicateSession(t *testing.T) {
 	}
 
 	// Create session
-	if err := runner.CreateSession(tmpDir, windows); err != nil {
+	if err := runner.CreateSession(SessionConfig{LogsDir: tmpDir, RunMode: "overwrite", Windows: windows}); err != nil {
 		t.Fatalf("CreateSession failed: %v", err)
 	}
 
 	// Try to create again - should fail
-	err := runner.CreateSession(tmpDir, windows)
+	err := runner.CreateSession(SessionConfig{LogsDir: tmpDir, RunMode: "overwrite", Windows: windows})
 	if err == nil {
 		t.Error("CreateSession should fail for duplicate session name")
 	}
@@ -351,7 +351,7 @@ func TestTmuxIntegration_SpecialCharactersInPaths(t *testing.T) {
 				}
 			}()
 
-			if err := testRunner.CreateSession(tmpDir, windows); err != nil {
+			if err := testRunner.CreateSession(SessionConfig{LogsDir: tmpDir, RunMode: "overwrite", Windows: windows}); err != nil {
 				t.Fatalf("CreateSession failed for %s: %v", tc.name, err)
 			}
 
@@ -390,7 +390,7 @@ func TestTmuxIntegration_EmptyLogFile(t *testing.T) {
 		},
 	}
 
-	if err := runner.CreateSession(tmpDir, windows); err != nil {
+	if err := runner.CreateSession(SessionConfig{LogsDir: tmpDir, RunMode: "overwrite", Windows: windows}); err != nil {
 		t.Fatalf("CreateSession failed: %v", err)
 	}
 
@@ -432,7 +432,7 @@ func TestTmuxIntegration_GetLogsDir(t *testing.T) {
 		},
 	}
 
-	if err := runner.CreateSession(tmpDir, windows); err != nil {
+	if err := runner.CreateSession(SessionConfig{LogsDir: tmpDir, RunMode: "overwrite", Windows: windows}); err != nil {
 		t.Fatalf("CreateSession failed: %v", err)
 	}
 
@@ -479,7 +479,7 @@ func TestTmuxIntegration_MultiplePanesSameLogFile(t *testing.T) {
 		},
 	}
 
-	if err := runner.CreateSession(tmpDir, windows); err != nil {
+	if err := runner.CreateSession(SessionConfig{LogsDir: tmpDir, RunMode: "overwrite", Windows: windows}); err != nil {
 		t.Fatalf("CreateSession failed: %v", err)
 	}
 
@@ -527,7 +527,7 @@ func TestTmuxIntegration_LongSessionName(t *testing.T) {
 		},
 	}
 
-	if err := runner.CreateSession(tmpDir, windows); err != nil {
+	if err := runner.CreateSession(SessionConfig{LogsDir: tmpDir, RunMode: "overwrite", Windows: windows}); err != nil {
 		t.Fatalf("CreateSession failed with long session name: %v", err)
 	}
 
@@ -570,7 +570,7 @@ func TestTmuxIntegration_PaneCommands(t *testing.T) {
 		},
 	}
 
-	if err := runner.CreateSession(tmpDir, windows); err != nil {
+	if err := runner.CreateSession(SessionConfig{LogsDir: tmpDir, RunMode: "overwrite", Windows: windows}); err != nil {
 		t.Fatalf("CreateSession failed: %v", err)
 	}
 
@@ -615,7 +615,7 @@ func TestTmuxIntegration_PosixCommandSyntax(t *testing.T) {
 		},
 	}
 
-	if err := runner.CreateSession(tmpDir, windows); err != nil {
+	if err := runner.CreateSession(SessionConfig{LogsDir: tmpDir, RunMode: "overwrite", Windows: windows}); err != nil {
 		t.Fatalf("CreateSession failed: %v", err)
 	}
 

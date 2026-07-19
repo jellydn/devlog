@@ -16,6 +16,16 @@ import (
 // Runner handles tmux session operations
 type Runner struct {
 	sessionName string
+	logsDir     string // resolved logs directory for this session (set by CreateSession)
+}
+
+// SessionConfig provides everything needed to create a tmux session.
+// Window/pane types remain in internal/config (Option A: keep dependency direction).
+type SessionConfig struct {
+	Session string
+	LogsDir string // base logs directory (e.g. "./logs")
+	RunMode string // "timestamped" or "overwrite"
+	Windows []config.WindowConfig
 }
 
 // NewRunner creates a new tmux runner for the given session
@@ -32,24 +42,32 @@ func (r *Runner) SessionExists() bool {
 	return err == nil
 }
 
-// CreateSession creates a new tmux session with the given windows and panes
-func (r *Runner) CreateSession(logsDir string, windows []config.WindowConfig) error {
+// CreateSession creates a new tmux session with the given windows and panes.
+// It resolves the logs directory from cfg (timestamped subdirectory when needed),
+// stores it on the Runner, and exports DEVLOG_LOGS_DIR in the tmux session env.
+func (r *Runner) CreateSession(cfg SessionConfig) error {
 	if r.SessionExists() {
 		return fmt.Errorf("tmux session '%s' already exists", r.sessionName)
 	}
 
+	logsDir := cfg.LogsDir
+	if cfg.RunMode == "timestamped" {
+		logsDir = filepath.Join(cfg.LogsDir, time.Now().Format("20060102-150405"))
+	}
+	r.logsDir = logsDir
+
 	if err := os.MkdirAll(logsDir, 0755); err != nil {
 		return fmt.Errorf("failed to create logs directory: %w", err)
 	}
-	if err := ensurePaneLogFiles(logsDir, windows); err != nil {
+	if err := ensurePaneLogFiles(logsDir, cfg.Windows); err != nil {
 		return err
 	}
 
-	if len(windows) == 0 || len(windows[0].Panes) == 0 {
+	if len(cfg.Windows) == 0 || len(cfg.Windows[0].Panes) == 0 {
 		return fmt.Errorf("at least one window with one pane is required")
 	}
 
-	firstWindow := windows[0]
+	firstWindow := cfg.Windows[0]
 	firstPane := firstWindow.Panes[0]
 
 	cmd := exec.Command("tmux", "new-session", "-d", "-s", r.sessionName, "-n", firstWindow.Name)
@@ -70,20 +88,20 @@ func (r *Runner) CreateSession(logsDir string, windows []config.WindowConfig) er
 
 	// Use window name in target - tmux will target the active pane in that window
 	firstWindowTarget := fmt.Sprintf("%s:%s", r.sessionName, firstWindow.Name)
-	if err := r.sendCommandWithLogging(firstWindowTarget, firstPane.Cmd, logsDir, firstPane.Log); err != nil {
+	if err := r.sendCommandWithLogging(firstWindowTarget, firstPane.Cmd, firstPane.Log); err != nil {
 		return fmt.Errorf("failed to run command in first pane: %w", err)
 	}
 
 	for i := 1; i < len(firstWindow.Panes); i++ {
 		pane := firstWindow.Panes[i]
-		if err := r.splitWindow(firstWindowTarget, pane.Cmd, logsDir, pane.Log); err != nil {
+		if err := r.splitWindow(firstWindowTarget, pane.Cmd, pane.Log); err != nil {
 			return fmt.Errorf("failed to create pane %d in window %s: %w", i, firstWindow.Name, err)
 		}
 	}
 
-	for i := 1; i < len(windows); i++ {
-		window := windows[i]
-		if err := r.createWindow(i, window, logsDir); err != nil {
+	for i := 1; i < len(cfg.Windows); i++ {
+		window := cfg.Windows[i]
+		if err := r.createWindow(i, window); err != nil {
 			return fmt.Errorf("failed to create window %s: %w", window.Name, err)
 		}
 	}
@@ -123,7 +141,7 @@ func ensurePaneLogFiles(logsDir string, windows []config.WindowConfig) error {
 }
 
 // createWindow creates a new window with its panes
-func (r *Runner) createWindow(windowIndex int, window config.WindowConfig, logsDir string) error {
+func (r *Runner) createWindow(windowIndex int, window config.WindowConfig) error {
 	cmd := exec.Command("tmux", "new-window", "-t", r.sessionName, "-n", window.Name)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to create window: %w", err)
@@ -132,13 +150,13 @@ func (r *Runner) createWindow(windowIndex int, window config.WindowConfig, logsD
 	// Target the window by name - tmux will use the active pane
 	firstPane := window.Panes[0]
 	windowTarget := fmt.Sprintf("%s:%s", r.sessionName, window.Name)
-	if err := r.sendCommandWithLogging(windowTarget, firstPane.Cmd, logsDir, firstPane.Log); err != nil {
+	if err := r.sendCommandWithLogging(windowTarget, firstPane.Cmd, firstPane.Log); err != nil {
 		return fmt.Errorf("failed to run command in first pane: %w", err)
 	}
 
 	for i := 1; i < len(window.Panes); i++ {
 		pane := window.Panes[i]
-		if err := r.splitWindow(windowTarget, pane.Cmd, logsDir, pane.Log); err != nil {
+		if err := r.splitWindow(windowTarget, pane.Cmd, pane.Log); err != nil {
 			return fmt.Errorf("failed to create pane %d: %w", i, err)
 		}
 	}
@@ -147,14 +165,14 @@ func (r *Runner) createWindow(windowIndex int, window config.WindowConfig, logsD
 }
 
 // splitWindow splits the current window and runs a command with logging
-func (r *Runner) splitWindow(target string, command, logsDir, logFile string) error {
+func (r *Runner) splitWindow(target string, command, logFile string) error {
 	cmd := exec.Command("tmux", "split-window", "-h", "-t", target)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to split window: %w", err)
 	}
 
 	// After split-window, the new pane is active, so we can send to the window
-	if err := r.sendCommandWithLogging(target, command, logsDir, logFile); err != nil {
+	if err := r.sendCommandWithLogging(target, command, logFile); err != nil {
 		return err
 	}
 
@@ -162,9 +180,9 @@ func (r *Runner) splitWindow(target string, command, logsDir, logFile string) er
 }
 
 // sendCommandWithLogging sends a command to a pane with output captured via pipe-pane
-func (r *Runner) sendCommandWithLogging(target, command, logsDir, logFile string) error {
+func (r *Runner) sendCommandWithLogging(target, command, logFile string) error {
 	if logFile != "" {
-		logPath := filepath.Join(logsDir, logFile)
+		logPath := filepath.Join(r.logsDir, logFile)
 
 		// Quote the path to prevent command injection
 		pipeCmd := fmt.Sprintf("cat >> %s", shellescape.Quote(logPath))
@@ -241,8 +259,13 @@ func (r *Runner) getPaneIDs() ([]string, error) {
 	return ids, nil
 }
 
-// GetLogsDir retrieves the logs directory stored in the tmux session environment
+// GetLogsDir returns the resolved logs directory for this session.
+// Prefers the in-memory field set by CreateSession; falls back to the tmux
+// DEVLOG_LOGS_DIR environment variable for sessions started by older versions.
 func (r *Runner) GetLogsDir() string {
+	if r.logsDir != "" {
+		return r.logsDir
+	}
 	cmd := exec.Command("tmux", "show-environment", "-t", r.sessionName, "DEVLOG_LOGS_DIR")
 	output, err := cmd.Output()
 	if err != nil {

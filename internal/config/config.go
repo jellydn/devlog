@@ -3,10 +3,8 @@ package config
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
-	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -113,15 +111,6 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("config: retention_days must be non-negative, got %d", c.RetentionDays)
 	}
 	return nil
-}
-
-// ResolveLogsDir returns the actual logs directory based on run_mode
-func (c *Config) ResolveLogsDir() string {
-	if c.RunMode == "timestamped" {
-		timestamp := time.Now().Format("20060102-150405")
-		return filepath.Join(c.LogsDir, timestamp)
-	}
-	return c.LogsDir
 }
 
 // envVarRegex matches $VAR or ${VAR} patterns

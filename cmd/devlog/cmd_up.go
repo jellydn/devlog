@@ -13,7 +13,6 @@ import (
 
 func cmdUp(cfg *config.Config, args []string) error {
 	fmt.Printf("Starting devlog session '%s'...\n", cfg.Tmux.Session)
-	fmt.Printf("Logs will be written to: %s\n", cfg.ResolveLogsDir())
 
 	// Create tmux runner
 	runner := tmux.NewRunner(cfg.Tmux.Session)
@@ -38,11 +37,18 @@ func cmdUp(cfg *config.Config, args []string) error {
 		}
 	}
 
-	// Create the tmux session
-	logsDir := cfg.ResolveLogsDir()
-	if err := runner.CreateSession(logsDir, cfg.Tmux.Windows); err != nil {
+	// Create the tmux session (Runner resolves logs dir internally)
+	sessionCfg := tmux.SessionConfig{
+		Session: cfg.Tmux.Session,
+		LogsDir: cfg.LogsDir,
+		RunMode: cfg.RunMode,
+		Windows: cfg.Tmux.Windows,
+	}
+	if err := runner.CreateSession(sessionCfg); err != nil {
 		return fmt.Errorf("failed to create tmux session: %w", err)
 	}
+	logsDir := runner.GetLogsDir()
+	fmt.Printf("Logs will be written to: %s\n", logsDir)
 
 	fmt.Printf("Created tmux session '%s' with %d window(s)\n", cfg.Tmux.Session, len(cfg.Tmux.Windows))
 

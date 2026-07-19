@@ -7,7 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"fmt"
 	"github.com/jellydn/devlog/internal/config"
+	"time"
 )
 
 func TestRunner_SessionExists(t *testing.T) {
@@ -52,11 +54,15 @@ func TestRunner_CreateSession_AlreadyExists(t *testing.T) {
 	defer exec.Command("tmux", "kill-session", "-t", "test-duplicate-session").Run()
 
 	// Try to create again - should fail
-	err := runner.CreateSession("/tmp/testlogs", []config.WindowConfig{
-		{
-			Name: "main",
-			Panes: []config.PaneConfig{
-				{Cmd: "echo test", Log: "test.log"},
+	err := runner.CreateSession(SessionConfig{
+		LogsDir: "/tmp/testlogs",
+		RunMode: "overwrite",
+		Windows: []config.WindowConfig{
+			{
+				Name: "main",
+				Panes: []config.PaneConfig{
+					{Cmd: "echo test", Log: "test.log"},
+				},
 			},
 		},
 	})
@@ -116,7 +122,7 @@ func TestRunner_CreateAndKillSession(t *testing.T) {
 	}
 
 	// Create session
-	if err := runner.CreateSession(logsDir, windows); err != nil {
+	if err := runner.CreateSession(SessionConfig{LogsDir: logsDir, RunMode: "overwrite", Windows: windows}); err != nil {
 		t.Fatalf("CreateSession() failed: %v", err)
 	}
 
@@ -195,7 +201,7 @@ func TestRunner_CreateSession_NoWindows(t *testing.T) {
 	runner := NewRunner("test-no-windows")
 	logsDir := t.TempDir()
 
-	err := runner.CreateSession(logsDir, []config.WindowConfig{})
+	err := runner.CreateSession(SessionConfig{LogsDir: logsDir, RunMode: "overwrite", Windows: []config.WindowConfig{}})
 	if err == nil {
 		t.Error("CreateSession() expected error for empty windows, got nil")
 	}
@@ -227,7 +233,7 @@ func TestRunner_CreateSession_CreatesLogsDir(t *testing.T) {
 	}
 
 	// Create session - should create logs directory
-	if err := runner.CreateSession(logsDir, windows); err != nil {
+	if err := runner.CreateSession(SessionConfig{LogsDir: logsDir, RunMode: "overwrite", Windows: windows}); err != nil {
 		t.Fatalf("CreateSession() failed: %v", err)
 	}
 
@@ -332,5 +338,43 @@ func TestParsePaneLine_CommandWithPipe(t *testing.T) {
 	}
 	if pane.Command != "sh -c 'echo a|b'" {
 		t.Errorf("Command = %q", pane.Command)
+	}
+}
+
+func TestRunner_CreateSession_TimestampedLogsDir(t *testing.T) {
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skip("tmux not available in PATH")
+	}
+
+	base := t.TempDir()
+	session := fmt.Sprintf("test-ts-%d", time.Now().UnixNano()%100000)
+	runner := NewRunner(session)
+	defer exec.Command("tmux", "kill-session", "-t", session).Run()
+
+	windows := []config.WindowConfig{
+		{
+			Name: "main",
+			Panes: []config.PaneConfig{
+				{Cmd: "true", Log: "out.log"},
+			},
+		},
+	}
+	if err := runner.CreateSession(SessionConfig{
+		LogsDir: base,
+		RunMode: "timestamped",
+		Windows: windows,
+	}); err != nil {
+		t.Fatalf("CreateSession() failed: %v", err)
+	}
+
+	got := runner.GetLogsDir()
+	if got == base {
+		t.Fatalf("GetLogsDir() = base dir %q, want timestamped subdirectory", got)
+	}
+	if filepath.Dir(got) != base {
+		t.Fatalf("GetLogsDir() = %q, want child of %q", got, base)
+	}
+	if _, err := os.Stat(got); err != nil {
+		t.Fatalf("resolved logs dir missing: %v", err)
 	}
 }

@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>devlog — Zero-code log capture for local development</title>
+<meta name="description" content="Captures server logs via tmux and browser console logs via a native messaging host — all controlled by a single YAML config.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg-deep: #0f0b08;
+    --bg-surface: #181310;
+    --bg-elevated: #201a15;
+    --bg-hover: #282118;
+    --text-primary: #ede4d8;
+    --text-secondary: #a89984;
+    --text-muted: #6b5e4f;
+    --accent: #d97706;
+    --accent-glow: rgba(217, 119, 6, 0.15);
+    --accent-border: rgba(217, 119, 6, 0.3);
+    --code-green: #7c9f6b;
+    --code-blue: #7ba4b5;
+    --code-orange: #d4845a;
+    --code-red: #c1665a;
+    --code-yellow: #c4a35a;
+    --code-purple: #a38bc4;
+    --code-cyan: #6ea8ad;
+    --code-fg: #d4ccbe;
+    --code-bg: #15100d;
+    --code-surface: #1c1712;
+    --border-subtle: rgba(168, 153, 132, 0.12);
+    --border-medium: rgba(168, 153, 132, 0.2);
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+    --radius-xl: 24px;
+    --space-unit: 4px;
+  }
+
+  html { background: var(--bg-deep); color: var(--text-primary); font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+
+  body { line-height: 1.6; }
+
+  /* --- Typography --- */
+  h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; }
+  h1 { font-size: clamp(2.25rem, 5vw, 3.75rem); line-height: 1.1; }
+  h2 { font-size: clamp(1.5rem, 3.5vw, 2.25rem); line-height: 1.25; }
+  h3 { font-size: 1.125rem; line-height: 1.4; }
+
+  .mono { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.875rem; }
+
+  /* --- Layout --- */
+  .section { padding: calc(var(--space-unit) * 20) calc(var(--space-unit) * 6); max-width: 1080px; margin: 0 auto; }
+
+  /* --- Nav --- */
+  .nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; padding: 0 calc(var(--space-unit) * 6); }
+  .nav-inner { max-width: 1080px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; height: 56px; border-bottom: 1px solid transparent; transition: border-color 0.3s, background 0.3s; }
+  .nav.scrolled .nav-inner { background: rgba(15, 11, 8, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom-color: var(--border-subtle); }
+  .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text-primary); font-weight: 600; font-size: 1.05rem; }
+  .nav-logo svg { width: 28px; height: 28px; }
+  .nav-links { display: flex; gap: 20px; list-style: none; }
+  .nav-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.875rem; font-weight: 500; transition: color 0.2s; }
+  .nav-links a:hover { color: var(--text-primary); }
+  .nav-cta { background: var(--accent); color: #fff; border: none; padding: 6px 16px; border-radius: var(--radius-sm); font-size: 0.825rem; font-weight: 600; cursor: pointer; text-decoration: none; transition: background 0.2s, box-shadow 0.2s; }
+  .nav-cta:hover { background: #b65f04; box-shadow: 0 0 20px var(--accent-glow); }
+
+  /* --- Hero --- */
+  .hero { padding: 120px calc(var(--space-unit) * 6) calc(var(--space-unit) * 14); max-width: 1080px; margin: 0 auto; text-align: center; position: relative; }
+  .hero::before { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 600px; height: 600px; background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%); pointer-events: none; }
+  .hero-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 14px; border-radius: 20px; border: 1px solid var(--accent-border); background: rgba(217, 119, 6, 0.08); color: var(--accent); font-size: 0.8rem; font-weight: 500; margin-bottom: 28px; }
+  .hero-badge svg { width: 14px; height: 14px; }
+  .hero h1 { margin-bottom: 20px; position: relative; }
+  .hero h1 .hl { color: var(--accent); }
+  .hero p { color: var(--text-secondary); font-size: 1.15rem; max-width: 560px; margin: 0 auto 36px; position: relative; }
+  .hero-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; position: relative; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 22px; border-radius: var(--radius-md); font-weight: 600; font-size: 0.9rem; text-decoration: none; cursor: pointer; transition: all 0.2s; border: none; }
+  .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 0 24px var(--accent-glow); }
+  .btn-primary:hover { background: #b65f04; transform: translateY(-1px); box-shadow: 0 4px 32px var(--accent-glow); }
+  .btn-secondary { background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border-medium); }
+  .btn-secondary:hover { background: var(--bg-hover); border-color: var(--text-muted); }
+  .btn svg { width: 16px; height: 16px; }
+
+  /* --- Code Window --- */
+  .code-window { max-width: 680px; margin: 56px auto 0; border-radius: var(--radius-lg); background: var(--code-bg); border: 1px solid var(--border-medium); overflow: hidden; text-align: left; position: relative; }
+  .code-window-header { display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: var(--code-surface); border-bottom: 1px solid var(--border-subtle); }
+  .code-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .code-dot.red { background: #c1665a; }
+  .code-dot.yellow { background: #c4a35a; }
+  .code-dot.green { background: #7c9f6b; }
+  .code-window-title { color: var(--text-muted); font-size: 0.75rem; font-family: 'JetBrains Mono', monospace; margin-left: 8px; }
+  .code-window-body { padding: 20px; overflow-x: auto; }
+  .code-window-body pre { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.8rem; line-height: 1.7; color: var(--code-fg); }
+  .code-window-body .comment { color: #5c5348; }
+  .code-window-body .key { color: var(--code-blue); }
+  .code-window-body .str { color: var(--code-green); }
+  .code-window-body .num { color: var(--code-orange); }
+  .code-window-body .bool { color: var(--code-purple); }
+
+  /* --- Feature cards --- */
+  .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1px; background: var(--border-subtle); border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--border-subtle); }
+  .feature-card { background: var(--bg-surface); padding: calc(var(--space-unit) * 8); }
+  .feature-icon { width: 40px; height: 40px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; font-size: 1.2rem; background: var(--bg-elevated); border: 1px solid var(--border-subtle); }
+  .feature-card h3 { margin-bottom: 8px; }
+  .feature-card p { color: var(--text-secondary); font-size: 0.9rem; }
+
+  /* --- Architecture --- */
+  .arch-section { background: var(--bg-surface); border-radius: var(--radius-lg); border: 1px solid var(--border-subtle); overflow: hidden; }
+  .arch-diagram { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: calc(var(--space-unit) * 10); gap: calc(var(--space-unit) * 6); }
+  .arch-col { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 4); }
+  .arch-box { background: var(--bg-elevated); border: 1px solid var(--border-medium); border-radius: var(--radius-md); padding: calc(var(--space-unit) * 4) calc(var(--space-unit) * 5); }
+  .arch-box h4 { font-size: 0.9rem; margin-bottom: 4px; }
+  .arch-box p { color: var(--text-muted); font-size: 0.8rem; font-family: 'JetBrains Mono', monospace; }
+  .arch-arrow { display: flex; align-items: center; justify-content: center; color: var(--accent); font-size: 1.5rem; flex-direction: column; gap: 12px; }
+  .arch-center { background: var(--bg-deep); border: 1px solid var(--accent-border); border-radius: var(--radius-md); padding: calc(var(--space-unit) * 5); text-align: center; }
+
+  /* --- CLI table --- */
+  .cli-table { width: 100%; border-collapse: collapse; }
+  .cli-table th { text-align: left; font-size: 0.75rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; padding: 0 0 12px; }
+  .cli-table td { padding: 10px 0; border-top: 1px solid var(--border-subtle); font-size: 0.875rem; }
+  .cli-table td:first-child { font-family: 'JetBrains Mono', monospace; color: var(--accent); font-weight: 500; }
+  .cli-table td:last-child { color: var(--text-secondary); }
+
+  /* --- Install tabs --- */
+  .install-tabs { display: flex; gap: 2px; background: var(--border-subtle); border-radius: var(--radius-md); padding: 3px; margin-bottom: calc(var(--space-unit) * 4); width: fit-content; }
+  .install-tab { padding: 6px 16px; border-radius: var(--radius-sm); border: none; background: transparent; color: var(--text-secondary); font-size: 0.825rem; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+  .install-tab.active { background: var(--bg-elevated); color: var(--text-primary); }
+  .install-panel { display: none; }
+  .install-panel.active { display: block; }
+
+  /* --- Testimonial / social proof --- */
+  .proof-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: calc(var(--space-unit) * 6); }
+  .proof-item { text-align: center; padding: calc(var(--space-unit) * 8); }
+  .proof-number { font-size: 2.5rem; font-weight: 700; color: var(--accent); letter-spacing: -0.03em; }
+  .proof-label { color: var(--text-muted); font-size: 0.85rem; margin-top: 4px; }
+
+  /* --- Footer --- */
+  .footer { border-top: 1px solid var(--border-subtle); padding: calc(var(--space-unit) * 10) calc(var(--space-unit) * 6); max-width: 1080px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; font-size: 0.85rem; color: var(--text-muted); }
+  .footer a { color: var(--text-secondary); text-decoration: none; transition: color 0.2s; }
+  .footer a:hover { color: var(--text-primary); }
+
+  /* --- Section headers --- */
+  .section-header { text-align: center; margin-bottom: calc(var(--space-unit) * 14); }
+  .section-header .tag { display: inline-block; color: var(--accent); font-size: 0.8rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 12px; }
+  .section-header p { color: var(--text-secondary); margin-top: 10px; max-width: 480px; margin-left: auto; margin-right: auto; }
+
+  /* --- Log levels inline --- */
+  .log-levels { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .log-badge { padding: 2px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; font-family: 'JetBrains Mono', monospace; }
+  .log-badge.error { background: rgba(193, 102, 90, 0.15); color: var(--code-red); }
+  .log-badge.warn { background: rgba(196, 163, 90, 0.15); color: var(--code-yellow); }
+  .log-badge.info { background: rgba(123, 164, 181, 0.15); color: var(--code-blue); }
+  .log-badge.log { background: rgba(124, 159, 107, 0.15); color: var(--code-green); }
+
+  /* --- Responsive --- */
+  @media (max-width: 768px) {
+    .arch-diagram { grid-template-columns: 1fr; }
+    .arch-arrow { transform: rotate(90deg); }
+    .nav-links { display: none; }
+    .hero { padding: 100px calc(var(--space-unit) * 4) calc(var(--space-unit) * 10); }
+    .section { padding: calc(var(--space-unit) * 12) calc(var(--space-unit) * 4); }
+  }
+
+  @media (max-width: 480px) {
+    .hero-actions { flex-direction: column; align-items: stretch; }
+    .btn { justify-content: center; }
+  }
+
+  /* --- Scroll reveal --- */
+  .reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1), transform 0.6s cubic-bezier(0.22, 1, 0.36, 1); }
+  .reveal.visible { opacity: 1; transform: translateY(0); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .reveal { opacity: 1; transform: none; transition: none; }
+    .btn, .nav-inner, .install-tab { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="nav-inner">
+    <a href="#" class="nav-logo">
+      <svg viewBox="0 0 32 32" fill="none"><rect x="2" y="4" width="28" height="22" rx="3" stroke="#d97706" stroke-width="1.8" fill="none"/><path d="M2 10h28" stroke="#d97706" stroke-width="1.8"/><circle cx="6" cy="7" r="1" fill="#c1665a"/><circle cx="10" cy="7" r="1" fill="#c4a35a"/><circle cx="14" cy="7" r="1" fill="#7c9f6b"/><rect x="6" y="14" width="10" height="1.5" rx="0.75" fill="#6b5e4f"/><rect x="6" y="18" width="14" height="1.5" rx="0.75" fill="#6b5e4f"/><rect x="6" y="22" width="8" height="1.5" rx="0.75" fill="#6b5e4f"/><rect x="4" y="26" width="24" height="2" rx="1" fill="#d97706" opacity="0.5"/></svg>
+      devlog
+    </a>
+    <ul class="nav-links">
+      <li><a href="#features">Features</a></li>
+      <li><a href="#install">Install</a></li>
+      <li><a href="#cli">CLI</a></li>
+      <li><a href="https://github.com/jellydn/devlog" target="_blank" rel="noopener">GitHub</a></li>
+    </ul>
+    <a href="#install" class="nav-cta">Get Started</a>
+  </div>
+</nav>
+
+<section class="hero reveal">
+  <div class="hero-badge">
+    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a3.5 3.5 0 0 0-3.5 3.5V7H2a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-2.5V4.5A3.5 3.5 0 0 0 8 1Zm0 1.5a2 2 0 0 1 2 2V7H6V4.5a2 2 0 0 1 2-2Z"/></svg>
+    Zero-code log capture
+  </div>
+  <h1>Capture every log.<br>Change <span class="hl">zero code</span>.</h1>
+  <p>Server logs from tmux. Browser console from an extension. One YAML config file, one command, and you're done. No SDKs, no wrappers, no instrumentation.</p>
+  <div class="hero-actions">
+    <a href="#install" class="btn btn-primary">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a.5.5 0 0 1 .5.5v11.793l3.146-3.147a.5.5 0 0 1 .708.708l-4 4a.5.5 0 0 1-.708 0l-4-4a.5.5 0 0 1 .708-.708L7.5 13.293V1.5A.5.5 0 0 1 8 1z"/></svg>
+      curl install
+    </a>
+    <a href="https://github.com/jellydn/devlog" class="btn btn-secondary" target="_blank" rel="noopener">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+      View on GitHub
+    </a>
+  </div>
+
+  <div class="code-window reveal" style="transition-delay: 0.1s">
+    <div class="code-window-header">
+      <span class="code-dot red"></span><span class="code-dot yellow"></span><span class="code-dot green"></span>
+      <span class="code-window-title">devlog.yml</span>
+    </div>
+    <div class="code-window-body">
+      <pre><span class="key">version</span>: <span class="num">1</span>
+<span class="key">project</span>: <span class="str">my-app</span>
+<span class="key">logs_dir</span>: <span class="str">./logs</span>
+
+<span class="key">tmux</span>:
+  <span class="key">session</span>: <span class="str">my-app</span>
+  <span class="key">windows</span>:
+    - <span class="key">name</span>: <span class="str">dev</span>
+      <span class="key">panes</span>:
+        - <span class="key">name</span>: <span class="str">web</span>
+          <span class="key">cmd</span>: <span class="str">npm run dev</span>
+          <span class="key">log</span>: <span class="str">server/web.log</span>
+        - <span class="key">name</span>: <span class="str">api</span>
+          <span class="key">cmd</span>: <span class="str">pnpm --filter api dev</span>
+          <span class="key">log</span>: <span class="str">server/api.log</span>
+
+<span class="key">browser</span>:
+  <span class="key">native_host</span>: <span class="bool">true</span>
+  <span class="key">file</span>: <span class="str">browser/console.log</span>
+  <span class="key">levels</span>: [error, warn, info, log]
+  <span class="key">urls</span>:
+    - <span class="str">"http://localhost:*/*"</span></pre>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="features">
+  <div class="section-header reveal">
+    <span class="tag">Features</span>
+    <h2>Set it and forget it</h2>
+    <p>One YAML file declares everything. devlog handles the rest — tmux sessions, browser logs, timestamps, and cleanup.</p>
+  </div>
+  <div class="features-grid reveal">
+    <div class="feature-card">
+      <div class="feature-icon" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      </div>
+      <h3>tmux log capture</h3>
+      <p>Creates sessions, runs dev commands, and pipes stdout/stderr to timestamped log files. Every pane, every process.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      </div>
+      <h3>Browser console capture</h3>
+      <p>Chrome + Firefox extension streams console.* calls, uncaught errors, and unhandled rejections straight to disk via native messaging.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+      </div>
+      <h3>One YAML config</h3>
+      <p>Commands, panes, log paths, URL filters, log levels — all in a single devlog.yml. Environment variable interpolation built in.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      </div>
+      <h3>Timestamped or overwrite</h3>
+      <p>Run in timestamped mode for history, or overwrite mode for a clean slate. Auto-cleanup old runs by count or age.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      </div>
+      <h3>Single binary</h3>
+      <p>Go binary. No runtime, no Node, no Python. Drop it in your PATH and go. Works anywhere tmux runs.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><path d="M21 12c0 4.97-4.03 9-9 9a9.04 9.04 0 0 1-8.09-4.97"/><path d="M8.55 14.14A5 5 0 0 1 3 12c0-2.97 1.97-5.48 4.62-6.25"/><path d="M12 3c2.53 0 4.77 1.2 6.24 3"/></svg>
+      </div>
+      <h3>Health check built in</h3>
+      <p><span class="mono" style="font-size:0.825rem">devlog healthcheck</span> verifies tmux, browser extension registration, and native host — before you start.</p>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:36px;justify-content:center" class="reveal">
+    <span class="log-badge error">error</span>
+    <span class="log-badge warn">warn</span>
+    <span class="log-badge info">info</span>
+    <span class="log-badge log">log</span>
+    <span style="color:var(--text-muted);font-size:0.8rem;display:flex;align-items:center">+ uncaught errors + unhandled rejections</span>
+  </div>
+</section>
+
+<section class="section" style="padding-top:0">
+  <div class="section-header reveal">
+    <span class="tag">How it works</span>
+    <h2>Two inputs, one output</h2>
+    <p>Server stdout and browser console converge into timestamped log files. No middleware, no service — just pipes.</p>
+  </div>
+  <div class="arch-section reveal">
+    <div class="arch-diagram">
+      <div class="arch-col">
+        <div class="arch-box" style="border-left: 3px solid var(--accent)">
+          <h4>tmux panes</h4>
+          <p>stdout / stderr</p>
+        </div>
+        <div style="color:var(--text-muted);font-size:0.8rem;text-align:center">npm run dev · pnpm dev · make watch</div>
+      </div>
+      <div class="arch-arrow">
+        <div style="text-align:center;font-size:0.75rem;color:var(--text-muted);margin-bottom:8px">captures</div>
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M5 12h14"/><polyline points="12 5 19 12 12 19"/></svg>
+      </div>
+      <div class="arch-center">
+        <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:8px">
+          <svg width="20" height="20" viewBox="0 0 32 32" fill="none"><rect x="2" y="4" width="28" height="22" rx="3" stroke="#d97706" stroke-width="1.8" fill="none"/><path d="M2 10h28" stroke="#d97706" stroke-width="1.8"/><circle cx="6" cy="7" r="1" fill="#c1665a"/><circle cx="10" cy="7" r="1" fill="#c4a35a"/><circle cx="14" cy="7" r="1" fill="#7c9f6b"/></svg>
+          <span style="font-weight:600">devlog</span>
+        </div>
+        <div style="font-size:1.5rem;margin-bottom:4px">📄</div>
+        <div style="font-size:0.75rem;color:var(--text-muted);font-family:'JetBrains Mono',monospace">logs/<br>  2026-02-10_17-23-11/<br>    server/web.log<br>    server/api.log<br>    browser/console.log</div>
+      </div>
+      <div class="arch-arrow">
+        <div style="text-align:center;font-size:0.75rem;color:var(--text-muted);margin-bottom:8px">captures</div>
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M5 12h14"/><polyline points="12 5 19 12 12 19"/></svg>
+      </div>
+      <div class="arch-col">
+        <div class="arch-box" style="border-right: 3px solid var(--accent)">
+          <h4>Browser tab</h4>
+          <p>console.* / errors</p>
+        </div>
+        <div style="color:var(--text-muted);font-size:0.8rem;text-align:center">Extension + Native Messaging Host</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="install" style="padding-top:0">
+  <div class="section-header reveal">
+    <span class="tag">Install</span>
+    <h2>One command to start</h2>
+    <p>Pick your install method. Mac, Linux, WSL — anywhere tmux runs.</p>
+  </div>
+  <div class="reveal" style="max-width:640px;margin:0 auto">
+    <div class="install-tabs">
+      <button class="install-tab active" data-tab="curl">curl</button>
+      <button class="install-tab" data-tab="go">go install</button>
+    </div>
+    <div class="install-panel active" id="panel-curl">
+      <div class="code-window">
+        <div class="code-window-header">
+          <span class="code-dot red"></span><span class="code-dot yellow"></span><span class="code-dot green"></span>
+          <span class="code-window-title">terminal</span>
+        </div>
+        <div class="code-window-body">
+          <pre><span class="comment"># Quick install</span>
+curl -fsSL https://raw.githubusercontent.com/jellydn/devlog/main/install.sh | sh
+
+<span class="comment"># Or specify version and directory</span>
+<span class="key">VERSION</span>=<span class="str">v0.1.0</span> <span class="key">INSTALL_DIR</span>=<span class="str">~/.local/bin</span> \
+  curl -fsSL https://raw.githubusercontent.com/jellydn/devlog/main/install.sh | sh</pre>
+        </div>
+      </div>
+    </div>
+    <div class="install-panel" id="panel-go">
+      <div class="code-window">
+        <div class="code-window-header">
+          <span class="code-dot red"></span><span class="code-dot yellow"></span><span class="code-dot green"></span>
+          <span class="code-window-title">terminal</span>
+        </div>
+        <div class="code-window-body">
+          <pre><span class="comment"># Requires Go 1.25+</span>
+go install github.com/jellydn/devlog/cmd/devlog@latest
+go install github.com/jellydn/devlog/cmd/devlog-host@latest</pre>
+        </div>
+      </div>
+    </div>
+    <p style="text-align:center;margin-top:24px;color:var(--text-muted);font-size:0.85rem">
+      Then run <span class="mono" style="color:var(--accent)">devlog init</span> to create your config, <span class="mono" style="color:var(--accent)">devlog healthcheck</span> to verify, and <span class="mono" style="color:var(--accent)">devlog up</span> to start capturing.
+    </p>
+  </div>
+</section>
+
+<section class="section" id="cli" style="padding-top:0">
+  <div class="section-header reveal">
+    <span class="tag">CLI</span>
+    <h2>Everything you need</h2>
+    <p>Ten commands. Simple verbs. No surprises.</p>
+  </div>
+  <div class="reveal" style="max-width:600px;margin:0 auto;overflow-x:auto">
+    <table class="cli-table">
+      <thead><tr><th>Command</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td>init</td><td>Create devlog.yml template</td></tr>
+        <tr><td>healthcheck</td><td>Check system requirements</td></tr>
+        <tr><td>up</td><td>Start tmux session + browser logging</td></tr>
+        <tr><td>down</td><td>Stop session, flush logs</td></tr>
+        <tr><td>attach</td><td>Attach to running tmux session</td></tr>
+        <tr><td>status</td><td>Show session state + log paths</td></tr>
+        <tr><td>ls</td><td>List log runs</td></tr>
+        <tr><td>open</td><td>Open logs directory in file manager</td></tr>
+        <tr><td>register</td><td>Register native messaging host</td></tr>
+        <tr><td>help</td><td>Show usage</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section reveal" style="padding-top:0">
+  <div class="section-header">
+    <span class="tag">Requirements</span>
+    <h2>Lightweight, focused</h2>
+  </div>
+  <div class="proof-grid">
+    <div class="proof-item">
+      <div class="proof-number">Go 1.25+</div>
+      <div class="proof-label">Single binary, no runtime</div>
+    </div>
+    <div class="proof-item">
+      <div class="proof-number">1 dep</div>
+      <div class="proof-label">Only gopkg.in/yaml.v3</div>
+    </div>
+    <div class="proof-item">
+      <div class="proof-number">tmux</div>
+      <div class="proof-label">Session management</div>
+    </div>
+    <div class="proof-item">
+      <div class="proof-number">Chrome + FF</div>
+      <div class="proof-label">Browser extension support</div>
+    </div>
+  </div>
+</section>
+
+<footer class="footer reveal">
+  <div>
+    devlog · <a href="https://github.com/jellydn/devlog/blob/main/LICENSE">MIT License</a>
+  </div>
+  <div style="display:flex;gap:24px">
+    <a href="https://github.com/jellydn/devlog" target="_blank" rel="noopener">GitHub</a>
+    <a href="https://github.com/jellydn/devlog/blob/main/PRIVACY.md">Privacy</a>
+  </div>
+</footer>
+
+<script>
+  // Nav scroll effect
+  const nav = document.getElementById('nav');
+  window.addEventListener('scroll', () => {
+    nav.classList.toggle('scrolled', window.scrollY > 10);
+  }, {passive:true});
+
+  // Install tabs
+  document.querySelectorAll('.install-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.install-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.install-panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+    });
+  });
+
+  // Scroll reveal
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+      }
+    });
+  }, {threshold: 0.1, rootMargin: '0px 0px -40px 0px'});
+
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+  // Smooth scroll for anchor links
+  document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+      const href = this.getAttribute('href');
+      if (href === '#') return;
+      e.preventDefault();
+      const target = document.querySelector(href);
+      if (target) target.scrollIntoView({behavior:'smooth', block:'start'});
+    });
+  });
+</script>
+
+</body>
+</html>

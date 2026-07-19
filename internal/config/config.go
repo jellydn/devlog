@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
@@ -147,97 +146,4 @@ func interpolateEnvVars(input string) string {
 		}
 		return value
 	})
-}
-
-// CleanupResult describes directories selected for removal by CleanupOldRuns.
-type CleanupResult struct {
-	// Removed lists directories that were removed (or would be removed in dry-run).
-	Removed []string
-	// Failed maps directory paths that could not be removed to the error.
-	Failed map[string]error
-}
-
-// CleanupOldRuns removes old log directories based on retention policy.
-// It does not print; callers format CleanupResult for the user.
-func (c *Config) CleanupOldRuns(dryRun bool) (*CleanupResult, error) {
-	result := &CleanupResult{
-		Failed: make(map[string]error),
-	}
-
-	// Only cleanup for timestamped mode
-	if c.RunMode != "timestamped" {
-		return result, nil
-	}
-
-	// Skip if no retention policy is set
-	if c.MaxRuns == 0 && c.RetentionDays == 0 {
-		return result, nil
-	}
-
-	entries, err := os.ReadDir(c.LogsDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return result, nil // Nothing to clean up
-		}
-		return result, fmt.Errorf("failed to read logs directory: %w", err)
-	}
-
-	// Collect directories with their info
-	type dirInfo struct {
-		entry   os.DirEntry
-		modTime time.Time
-	}
-	var dirs []dirInfo
-
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		info, err := entry.Info()
-		if err != nil {
-			continue
-		}
-		dirs = append(dirs, dirInfo{entry: entry, modTime: info.ModTime()})
-	}
-
-	// Sort by modification time (newest first)
-	sort.Slice(dirs, func(i, j int) bool {
-		return dirs[i].modTime.After(dirs[j].modTime)
-	})
-
-	// Determine which directories to remove
-	toRemove := make(map[string]bool)
-
-	// Apply max_runs policy
-	if c.MaxRuns > 0 && len(dirs) > c.MaxRuns {
-		for _, dir := range dirs[c.MaxRuns:] {
-			toRemove[dir.entry.Name()] = true
-		}
-	}
-
-	// Apply retention_days policy
-	if c.RetentionDays > 0 {
-		cutoffTime := time.Now().AddDate(0, 0, -c.RetentionDays)
-		for _, dir := range dirs {
-			if dir.modTime.Before(cutoffTime) {
-				toRemove[dir.entry.Name()] = true
-			}
-		}
-	}
-
-	// Remove directories (or record dry-run candidates)
-	for name := range toRemove {
-		dirPath := filepath.Join(c.LogsDir, name)
-		if dryRun {
-			result.Removed = append(result.Removed, dirPath)
-			continue
-		}
-		if err := os.RemoveAll(dirPath); err != nil {
-			result.Failed[dirPath] = err
-			continue
-		}
-		result.Removed = append(result.Removed, dirPath)
-	}
-
-	return result, nil
 }

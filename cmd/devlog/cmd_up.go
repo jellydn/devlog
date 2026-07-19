@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/jellydn/devlog/internal/config"
+	"github.com/jellydn/devlog/internal/logrotate"
 	"github.com/jellydn/devlog/internal/tmux"
 )
 
@@ -22,14 +23,17 @@ func cmdUp(cfg *config.Config, args []string) error {
 	}
 
 	// Clean up old log runs if retention policy is configured
-	if result, err := cfg.CleanupOldRuns(false); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to cleanup old runs: %v\n", err)
-	} else if result != nil {
-		for _, dir := range result.Removed {
-			fmt.Printf("Removed old log directory: %s\n", dir)
-		}
-		for dir, remErr := range result.Failed {
-			fmt.Fprintf(os.Stderr, "Warning: failed to remove %s: %v\n", dir, remErr)
+	if cfg.RunMode == "timestamped" {
+		policy := logrotate.Policy{MaxRuns: cfg.MaxRuns, RetentionDays: cfg.RetentionDays}
+		if result, err := logrotate.Cleanup(cfg.LogsDir, policy, false); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to cleanup old runs: %v\n", err)
+		} else if result != nil {
+			for _, dir := range result.Removed {
+				fmt.Printf("Removed old log directory: %s\n", dir)
+			}
+			for dir, remErr := range result.Failed {
+				fmt.Fprintf(os.Stderr, "Warning: failed to remove %s: %v\n", dir, remErr)
+			}
 		}
 	}
 

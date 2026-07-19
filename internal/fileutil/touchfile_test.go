@@ -3,6 +3,7 @@ package fileutil
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -65,7 +66,9 @@ func testDefaultPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0644 {
+	// On Windows, os.Stat().Mode().Perm() does not reflect Unix permission bits
+	// (the OS uses ACLs instead), so skip the exact-mode assertion.
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0644 {
 		t.Errorf("mode = %o, want 0644", info.Mode().Perm())
 	}
 }

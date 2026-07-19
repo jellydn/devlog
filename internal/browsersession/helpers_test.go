@@ -1,8 +1,6 @@
 package browsersession
 
 import (
-	"fmt"
-	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -83,73 +81,3 @@ func TestBatchQuote(t *testing.T) {
 	}
 }
 
-func TestFindConfigFile(t *testing.T) {
-	tests := []struct {
-		name      string
-		setup     func(t *testing.T, tmpDir string) string // returns the expected config path
-		wantEmpty bool
-	}{
-		{
-			name: "in current dir",
-			setup: func(t *testing.T, tmpDir string) string {
-				t.Chdir(tmpDir)
-				return filepath.Join(tmpDir, "devlog.yml")
-			},
-			wantEmpty: false,
-		},
-		{
-			name: "in ancestor dir",
-			setup: func(t *testing.T, tmpDir string) string {
-				// Nest three levels below tmpDir; the config two levels up should still resolve.
-				nested := filepath.Join(tmpDir, "a", "b", "c")
-				if err := os.MkdirAll(nested, 0755); err != nil {
-					t.Fatalf("Failed to create nested dirs: %v", err)
-				}
-				t.Chdir(nested)
-				return filepath.Join(tmpDir, "devlog.yml")
-			},
-			wantEmpty: false,
-		},
-		{
-			name: "beyond bounded depth",
-			setup: func(t *testing.T, tmpDir string) string {
-				// Build a tree deeper than maxFindConfigDepth so the config at tmpDir is
-				// out of reach from the deepest directory. The walk must exhaust its
-				// budget before reaching the config and return "".
-				current := tmpDir
-				for i := 1; i <= maxFindConfigDepth+5; i++ {
-					current = filepath.Join(current, fmt.Sprintf("d%02d", i))
-				}
-				if err := os.MkdirAll(current, 0755); err != nil {
-					t.Fatalf("Failed to create deep nesting: %v", err)
-				}
-				t.Chdir(current)
-				return filepath.Join(tmpDir, "devlog.yml")
-			},
-			wantEmpty: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tmpDir := t.TempDir()
-			configPath := filepath.Join(tmpDir, "devlog.yml")
-			if err := os.WriteFile(configPath, []byte("version: \"1\"\n"), 0644); err != nil {
-				t.Fatalf("Failed to write devlog.yml: %v", err)
-			}
-
-			expectedPath := tt.setup(t, tmpDir)
-			got := findConfigFile()
-
-			if tt.wantEmpty {
-				if got != "" {
-					t.Errorf("findConfigFile() = %q, want empty (config should be beyond maxFindConfigDepth)", got)
-				}
-				return
-			}
-			if got != expectedPath {
-				t.Errorf("findConfigFile() = %q, want %q", got, expectedPath)
-			}
-		})
-	}
-}

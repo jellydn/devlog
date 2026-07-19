@@ -4,11 +4,11 @@ import (
 	"fmt"
 
 	"github.com/jellydn/devlog/internal/config"
-	"github.com/jellydn/devlog/internal/natmsg"
+	"github.com/jellydn/devlog/internal/manifest"
 )
 
 func cmdRegister(cfg *config.Config, args []string) error {
-	hostPath, err := natmsg.FindDevlogHostBinary()
+	hostPath, err := manifest.FindDevlogHostBinary()
 	if err != nil {
 		return fmt.Errorf("failed to find devlog-host binary: %w", err)
 	}
@@ -73,19 +73,19 @@ Examples:
 
 	if installChrome {
 		fmt.Printf("Registering for Chrome...\n")
-		if err := natmsg.InstallChromeManifest(hostPath, extensionID); err != nil {
+		if err := manifest.InstallChromeManifest(hostPath, extensionID); err != nil {
 			return fmt.Errorf("failed to register Chrome manifest: %w", err)
 		}
-		dir := natmsg.GetChromeNativeMessagingDir()
+		dir := manifest.GetChromeNativeMessagingDir()
 		fmt.Printf("  Installed to: %s\n", dir)
 	}
 
 	if installBrave {
 		fmt.Printf("Registering for Brave...\n")
-		if err := natmsg.InstallBraveManifest(hostPath, extensionID); err != nil {
+		if err := manifest.InstallBraveManifest(hostPath, extensionID); err != nil {
 			return fmt.Errorf("failed to register Brave manifest: %w", err)
 		}
-		dir := natmsg.GetBraveNativeMessagingDir()
+		dir := manifest.GetBraveNativeMessagingDir()
 		fmt.Printf("  Installed to: %s\n", dir)
 	}
 
@@ -96,10 +96,10 @@ Examples:
 		if firefoxExtID == "" {
 			firefoxExtID = "devlog@devlog.local"
 		}
-		if err := natmsg.InstallFirefoxManifestWithID(hostPath, firefoxExtID); err != nil {
+		if err := manifest.InstallFirefoxManifestWithID(hostPath, firefoxExtID); err != nil {
 			return fmt.Errorf("failed to register Firefox manifest: %w", err)
 		}
-		dirs := natmsg.GetFirefoxNativeMessagingDirs()
+		dirs := manifest.GetFirefoxNativeMessagingDirs()
 		fmt.Printf("  Installed to:\n")
 		for _, dir := range dirs {
 			fmt.Printf("    - %s\n", dir)

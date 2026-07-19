@@ -1,4 +1,4 @@
-package natmsg
+package manifest
 
 import (
 	"encoding/json"

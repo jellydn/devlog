@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/jellydn/devlog/internal/config"
-	"github.com/jellydn/devlog/internal/natmsg"
+	"github.com/jellydn/devlog/internal/manifest"
 	"github.com/jellydn/devlog/internal/tmux"
 )
 
@@ -35,7 +35,7 @@ func cmdHealthcheck(cfg *config.Config, args []string) error {
 	// Check devlog-host binary
 	fmt.Printf("%-*s ", maxLabelLen, "devlog-host binary:")
 	var hostPath string
-	hostPath, err = natmsg.FindDevlogHostBinary()
+	hostPath, err = manifest.FindDevlogHostBinary()
 	if err != nil {
 		fmt.Println("✗ NOT FOUND")
 		fmt.Println("  devlog-host is required for browser logging.")
@@ -47,10 +47,10 @@ func cmdHealthcheck(cfg *config.Config, args []string) error {
 
 	// Check native messaging manifests
 	fmt.Printf("%-*s ", maxLabelLen, "Browser extension:")
-	chromeManifestPath := filepath.Join(natmsg.GetChromeNativeMessagingDir(), "com.devlog.host.json")
-	braveManifestPath := filepath.Join(natmsg.GetBraveNativeMessagingDir(), "com.devlog.host.json")
+	chromeManifestPath := filepath.Join(manifest.GetChromeNativeMessagingDir(), "com.devlog.host.json")
+	braveManifestPath := filepath.Join(manifest.GetBraveNativeMessagingDir(), "com.devlog.host.json")
 	firefoxManifestPaths := []string{}
-	for _, dir := range natmsg.GetFirefoxNativeMessagingDirs() {
+	for _, dir := range manifest.GetFirefoxNativeMessagingDirs() {
 		firefoxManifestPaths = append(firefoxManifestPaths, filepath.Join(dir, "com.devlog.host.json"))
 	}
 
@@ -96,11 +96,11 @@ func cmdHealthcheck(cfg *config.Config, args []string) error {
 	// Check that manifest path targets exist on disk (self-heal when possible)
 	fmt.Printf("%-*s ", maxLabelLen, "Manifest host path:")
 	if hostPath != "" {
-		if repaired, err := natmsg.RepairStaleManifestPaths(hostPath); err == nil && repaired > 0 {
+		if repaired, err := manifest.RepairStaleManifestPaths(hostPath); err == nil && repaired > 0 {
 			fmt.Printf("✓ repaired %d stale path(s)\n", repaired)
 		}
 	}
-	paths, pathErr := natmsg.ReadManifestPaths()
+	paths, pathErr := manifest.ReadManifestPaths()
 	if pathErr != nil && len(paths) == 0 {
 		fmt.Println("○ none installed")
 	} else {

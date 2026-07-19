@@ -1,4 +1,4 @@
-package main
+package browsersession
 
 import (
 	"encoding/json"
@@ -10,7 +10,49 @@ import (
 	"testing"
 
 	"github.com/jellydn/devlog/internal/manifest"
+	"github.com/jellydn/devlog/internal/tmux"
 )
+
+// fixedHostManifest delegates to the real manifest package but returns a fixed host path.
+type fixedHostManifest struct {
+	hostPath string
+}
+
+func (f fixedHostManifest) FindDevlogHostBinary() (string, error) { return f.hostPath, nil }
+func (f fixedHostManifest) ValidateHostPath(path string) error {
+	return manifest.ValidateHostPath(path)
+}
+func (f fixedHostManifest) RepairStaleManifestPaths(hostPath string) (int, error) {
+	return manifest.RepairStaleManifestPaths(hostPath)
+}
+func (f fixedHostManifest) UpdateManifestPath(newPath string) error {
+	return manifest.UpdateManifestPath(newPath)
+}
+func (f fixedHostManifest) ReadManifestPaths() (map[string]string, error) {
+	return manifest.ReadManifestPaths()
+}
+func (f fixedHostManifest) IsManifestPathInUse(targetPath string) (bool, error) {
+	return manifest.IsManifestPathInUse(targetPath)
+}
+func (f fixedHostManifest) GetChromeNativeMessagingDir() string {
+	return manifest.GetChromeNativeMessagingDir()
+}
+func (f fixedHostManifest) GetBraveNativeMessagingDir() string {
+	return manifest.GetBraveNativeMessagingDir()
+}
+func (f fixedHostManifest) GetFirefoxNativeMessagingDirs() []string {
+	return manifest.GetFirefoxNativeMessagingDirs()
+}
+
+type realSessionChecker struct{}
+
+func (realSessionChecker) SessionExists(name string) bool {
+	return tmux.NewRunner(name).SessionExists()
+}
+
+func newTestSession(hostPath string) *Session {
+	return New(fixedHostManifest{hostPath: hostPath}, realSessionChecker{})
+}
 
 func withIsolatedHome(t *testing.T) (home string, cleanup func()) {
 	t.Helper()
@@ -74,7 +116,8 @@ func TestBrowserHostWrapper_RoundTrip(t *testing.T) {
 		t.Fatalf("install: %v", err)
 	}
 
-	if err := writeBrowserHostWrapperWithHost("test-session", logPath, []string{"error", "warn"}, hostPath); err != nil {
+	bs := newTestSession(hostPath)
+	if err := bs.start("test-session", logPath, []string{"error", "warn"}, hostPath); err != nil {
 		t.Fatalf("write wrapper: %v", err)
 	}
 
@@ -92,7 +135,7 @@ func TestBrowserHostWrapper_RoundTrip(t *testing.T) {
 		t.Errorf("manifest path = %q, want wrapper %q", got, wrapperPath)
 	}
 
-	restoreBrowserHostWrapperWithHost("test-session", hostPath)
+	bs.stop("test-session", hostPath)
 
 	if _, err := os.Stat(wrapperPath); !os.IsNotExist(err) {
 		t.Errorf("wrapper should be deleted after restore")
@@ -117,8 +160,9 @@ func TestBrowserHostWrapper_StaleRecovery(t *testing.T) {
 		t.Fatalf("install: %v", err)
 	}
 
+	bs := newTestSession(hostPath)
 	// First up
-	if err := writeBrowserHostWrapperWithHost("sess-a", logPath, nil, hostPath); err != nil {
+	if err := bs.start("sess-a", logPath, nil, hostPath); err != nil {
 		t.Fatalf("first write: %v", err)
 	}
 	wrapperPath := browserHostWrapperPath("sess-a")
@@ -132,7 +176,7 @@ func TestBrowserHostWrapper_StaleRecovery(t *testing.T) {
 	}
 
 	// Second up should self-heal and succeed
-	if err := writeBrowserHostWrapperWithHost("sess-a", logPath, []string{"error"}, hostPath); err != nil {
+	if err := bs.start("sess-a", logPath, []string{"error"}, hostPath); err != nil {
 		t.Fatalf("stale recovery write: %v", err)
 	}
 	if _, err := os.Stat(wrapperPath); err != nil {
@@ -175,11 +219,12 @@ func TestRefuseClobberActiveWrapper_SameSessionAllowed(t *testing.T) {
 		t.Fatal(err)
 	}
 	logPath := filepath.Join(tmp, "b.log")
-	if err := writeBrowserHostWrapperWithHost("same", logPath, nil, hostPath); err != nil {
+	bs := newTestSession(hostPath)
+	if err := bs.start("same", logPath, nil, hostPath); err != nil {
 		t.Fatal(err)
 	}
 	// Rewriting for the same session should be allowed even without a live tmux session
-	if err := writeBrowserHostWrapperWithHost("same", logPath, []string{"error"}, hostPath); err != nil {
+	if err := bs.start("same", logPath, []string{"error"}, hostPath); err != nil {
 		t.Fatalf("same session rewrite should be allowed: %v", err)
 	}
 }
@@ -209,12 +254,13 @@ func TestRefuseClobberActiveWrapper_OtherLiveSession(t *testing.T) {
 	defer exec.Command("tmux", "kill-session", "-t", session).Run()
 
 	logPath := filepath.Join(tmp, "b.log")
-	if err := writeBrowserHostWrapperWithHost(session, logPath, nil, hostPath); err != nil {
+	bs := newTestSession(hostPath)
+	if err := bs.start(session, logPath, nil, hostPath); err != nil {
 		t.Fatalf("setup other session wrapper: %v", err)
 	}
 
 	// Attempt to clobber from a different session while other is live
-	err := writeBrowserHostWrapperWithHost("new-session", logPath, nil, hostPath)
+	err := bs.start("new-session", logPath, nil, hostPath)
 	if err == nil {
 		t.Fatal("expected clobber refusal when other session is live")
 	}

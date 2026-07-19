@@ -1,4 +1,4 @@
-package main
+package browsersession
 
 import (
 	"fmt"

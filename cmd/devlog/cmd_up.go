@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/jellydn/devlog/internal/browsersession"
 	"github.com/jellydn/devlog/internal/config"
 	"github.com/jellydn/devlog/internal/logrotate"
 	"github.com/jellydn/devlog/internal/tmux"
@@ -51,7 +52,8 @@ func cmdUp(cfg *config.Config, args []string) error {
 		if err := ensureFileExists(browserLogPath); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to prepare browser log file: %v\n", err)
 		}
-		if err := writeBrowserHostWrapper(cfg.Tmux.Session, browserLogPath, cfg.Browser.Levels); err != nil {
+		bs := browsersession.New(manifestAdapter{}, tmuxSessionChecker{})
+		if err := bs.Start(cfg.Tmux.Session, browserLogPath, cfg.Browser.Levels); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to set up browser logging wrapper: %v\n", err)
 		} else {
 			fmt.Println("Browser logging: ready (wrapper updated)")

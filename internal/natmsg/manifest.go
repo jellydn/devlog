@@ -101,13 +101,14 @@ func getFirefoxDirs() []string {
 	}
 }
 
-func InstallChromeManifest(hostPath string, extensionID string) error {
+// installChromiumManifest writes a Chromium-style native messaging manifest (used by
+// Chrome and Brave) into dir. The label is used for error messages only.
+func installChromiumManifest(dir, hostPath, extensionID, label string) error {
 	if err := ValidateHostPath(hostPath); err != nil {
 		return err
 	}
-	dir := GetChromeNativeMessagingDir()
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create Chrome native messaging directory: %w", err)
+		return fmt.Errorf("failed to create %s native messaging directory: %w", label, err)
 	}
 
 	manifest := ChromeManifest{
@@ -120,45 +121,23 @@ func InstallChromeManifest(hostPath string, extensionID string) error {
 
 	data, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
-		return fmt.Errorf("failed to marshal Chrome manifest: %w", err)
+		return fmt.Errorf("failed to marshal %s manifest: %w", label, err)
 	}
 
-	manifestPath := filepath.Join(dir, "com.devlog.host.json")
+	manifestPath := filepath.Join(dir, ManifestFileName)
 	if err := os.WriteFile(manifestPath, data, 0600); err != nil {
-		return fmt.Errorf("failed to write Chrome manifest: %w", err)
+		return fmt.Errorf("failed to write %s manifest: %w", label, err)
 	}
 
 	return nil
 }
 
+func InstallChromeManifest(hostPath string, extensionID string) error {
+	return installChromiumManifest(GetChromeNativeMessagingDir(), hostPath, extensionID, "Chrome")
+}
+
 func InstallBraveManifest(hostPath string, extensionID string) error {
-	if err := ValidateHostPath(hostPath); err != nil {
-		return err
-	}
-	dir := GetBraveNativeMessagingDir()
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create Brave native messaging directory: %w", err)
-	}
-
-	manifest := ChromeManifest{
-		Name:           "com.devlog.host",
-		Description:    "devlog Native Messaging Host for Browser Log Capture",
-		Path:           hostPath,
-		Type:           "stdio",
-		AllowedOrigins: []string{fmt.Sprintf("chrome-extension://%s/", extensionID)},
-	}
-
-	data, err := json.MarshalIndent(manifest, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal Brave manifest: %w", err)
-	}
-
-	manifestPath := filepath.Join(dir, "com.devlog.host.json")
-	if err := os.WriteFile(manifestPath, data, 0600); err != nil {
-		return fmt.Errorf("failed to write Brave manifest: %w", err)
-	}
-
-	return nil
+	return installChromiumManifest(GetBraveNativeMessagingDir(), hostPath, extensionID, "Brave")
 }
 
 func InstallFirefoxManifest(hostPath string) error {
@@ -169,13 +148,10 @@ func InstallFirefoxManifestWithID(hostPath string, extensionID string) error {
 	if err := ValidateHostPath(hostPath); err != nil {
 		return err
 	}
+	// A single-element slice covers both standard add-on IDs (e.g. "devlog@devlog.local")
+	// and UUID-format IDs (e.g. "{xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}") that Firefox
+	// generates for unpacked temporary extensions.
 	allowedExts := []string{extensionID}
-
-	// For development, also allow the UUID format which Firefox generates for unpacked extensions
-	// UUID format: {xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}
-	if strings.HasPrefix(extensionID, "{") {
-		allowedExts = []string{extensionID}
-	}
 
 	manifest := FirefoxManifest{
 		Name:              "com.devlog.host",

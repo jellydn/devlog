@@ -291,27 +291,100 @@ Initial release:
 
 **License**: MIT
 
+## Automated Publishing (GitHub Actions)
+
+The `.github/workflows/release-extension.yml` workflow automates the full release pipeline: test → package → publish → GitHub Release.
+
+### How It Works
+
+1. **Trigger**: Push an `ext-v*` tag (e.g., `ext-v1.0.1`) or run manually via the Actions tab
+2. **Test**: Vitest extension tests must pass before packaging proceeds
+3. **Package**: Updates manifest versions from `browser-extension/VERSION`, runs packaging scripts, uploads ZIPs as artifacts
+4. **Publish**: Uploads to Chrome Web Store and Firefox Add-ons **in parallel** — partial success is allowed (one store failing doesn't block the other)
+5. **Release**: Creates a GitHub Release with both ZIPs attached, showing store publish status
+
+### Quick Start
+
+```bash
+# 1. Update the version file
+nano browser-extension/VERSION
+
+# 2. Commit and tag
+git add browser-extension/VERSION
+git commit -m "release: bump extension to v1.0.1"
+git tag ext-v1.0.1
+git push origin main ext-v1.0.1
+
+# 3. Monitor the workflow at:
+# https://github.com/jellydn/devlog/actions/workflows/release-extension.yml
+```
+
+### Required GitHub Secrets
+
+Set these in **Settings > Secrets and variables > Actions**:
+
+| Secret | Where to get it |
+|--------|----------------|
+| `CHROME_CLIENT_ID` | [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials → OAuth 2.0 Client ID |
+| `CHROME_CLIENT_SECRET` | Same as above — the client secret paired with the OAuth client ID |
+| `CHROME_REFRESH_TOKEN` | Generated via OAuth flow with the Chrome Web Store API scope. Use `chrome-webstore-upload-cli`'s refresh-token helper |
+| `FIREFOX_JWT_ISSUER` | [Firefox Add-on Developer Hub](https://addons.mozilla.org/developers/addon/api/key/) → API Credentials → JWT Issuer |
+| `FIREFOX_JWT_SECRET` | Same as above — JWT Secret |
+
+**Repository Variables** (Settings > Secrets and variables > Actions > Variables):
+
+| Variable | Value |
+|----------|-------|
+| `CHROME_EXTENSION_ID` | Your Chrome Web Store extension ID (from the developer dashboard URL) |
+
+### Obtaining Chrome Web Store Credentials
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a project (or use an existing one)
+3. Enable the **Chrome Web Store API**
+4. Go to **APIs & Services → OAuth consent screen** and configure it (External, add your email as test user)
+5. Go to **Credentials → Create Credentials → OAuth client ID**
+   - Application type: **Web application**
+   - Add `https://developers.google.com/oauthplayground` as an authorized redirect URI
+6. Use the generated client ID and secret as `CHROME_CLIENT_ID` and `CHROME_CLIENT_SECRET`
+7. Generate a refresh token:
+   - Go to [Google OAuth 2.0 Playground](https://developers.google.com/oauthplayground/)
+   - Click the gear icon (⚙️) → check **Use your own OAuth credentials** → enter your client ID and secret
+   - In the left panel, paste `https://www.googleapis.com/auth/chromewebstore` as the scope and click **Authorize APIs**
+   - Complete the OAuth flow, then click **Exchange authorization code for tokens**
+   - Copy the **Refresh token** and save it as `CHROME_REFRESH_TOKEN`
+
+### Obtaining Firefox Add-ons Credentials
+
+1. Go to [Firefox Add-on Developer Hub](https://addons.mozilla.org/developers/addon/api/key/)
+2. Click **Generate new credentials**
+3. Copy **JWT Issuer** → `FIREFOX_JWT_ISSUER`
+4. Copy **JWT Secret** → `FIREFOX_JWT_SECRET`
+
+### Manual Publishing (Fallback)
+
+If the automated workflow fails or you prefer manual publishing:
+
+```bash
+# Update version
+VERSION=$(cat browser-extension/VERSION)
+sed -i.bak "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" browser-extension/chrome/manifest.json && rm -f browser-extension/chrome/manifest.json.bak
+sed -i.bak "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" browser-extension/firefox/manifest.json && rm -f browser-extension/firefox/manifest.json.bak
+
+# Package
+./scripts/package-chrome.sh
+./scripts/package-firefox.sh
+
+# Upload manually to each store's developer dashboard
+```
+
 ## Version Management
 
-When releasing new versions:
+Extension versions are stored in `browser-extension/VERSION` and are **independent** from Go binary versions (which use `v*` git tags).
 
-1. Update version in both manifest files:
-   - `browser-extension/chrome/manifest.json`
-   - `browser-extension/firefox/manifest.json`
+The packaging scripts read this file and update `manifest.json` versions automatically.
 
-2. Package both extensions:
-   ```bash
-   ./scripts/package-chrome.sh
-   ./scripts/package-firefox.sh
-   ```
-
-3. Submit updated packages to both stores
-
-4. Create a GitHub release tag:
-   ```bash
-   git tag -a extension-v1.0.1 -m "Browser extension v1.0.1"
-   git push origin extension-v1.0.1
-   ```
+For manual releases, see [Manual Publishing](#manual-publishing-fallback) above.
 
 ## Maintenance Checklist
 

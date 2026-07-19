@@ -80,4 +80,3 @@ func TestBatchQuote(t *testing.T) {
 		t.Errorf("batchQuote quotes = %q", batchQuote(`say "hi"`))
 	}
 }
-

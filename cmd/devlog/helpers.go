@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/jellydn/devlog/internal/natmsg"
+	"github.com/jellydn/devlog/internal/manifest"
 	"github.com/jellydn/devlog/internal/shellescape"
 	"github.com/jellydn/devlog/internal/tmux"
 )
@@ -93,7 +93,7 @@ func sanitizeSessionForFileName(session string) string {
 }
 
 func writeBrowserHostWrapper(session string, browserLogPath string, levels []string) error {
-	hostPath, err := natmsg.FindDevlogHostBinary()
+	hostPath, err := manifest.FindDevlogHostBinary()
 	if err != nil {
 		return err
 	}
@@ -102,13 +102,13 @@ func writeBrowserHostWrapper(session string, browserLogPath string, levels []str
 
 // writeBrowserHostWrapperWithHost is the testable core of writeBrowserHostWrapper.
 func writeBrowserHostWrapperWithHost(session, browserLogPath string, levels []string, hostPath string) error {
-	if err := natmsg.ValidateHostPath(hostPath); err != nil {
+	if err := manifest.ValidateHostPath(hostPath); err != nil {
 		return fmt.Errorf("untrusted host binary: %w", err)
 	}
 
 	// Self-heal: if a previous unclean shutdown left manifests pointing at a
 	// missing wrapper, restore them to the real binary before we rewrite.
-	if _, err := natmsg.RepairStaleManifestPaths(hostPath); err != nil {
+	if _, err := manifest.RepairStaleManifestPaths(hostPath); err != nil {
 		// Non-fatal when no manifests exist yet.
 		if !strings.Contains(err.Error(), "failed to read some manifests") &&
 			!strings.Contains(err.Error(), "no native messaging") {
@@ -140,7 +140,7 @@ func writeBrowserHostWrapperWithHost(session, browserLogPath string, levels []st
 		return err
 	}
 
-	if err := natmsg.UpdateManifestPath(wrapperPath); err != nil {
+	if err := manifest.UpdateManifestPath(wrapperPath); err != nil {
 		return fmt.Errorf("failed to update native messaging manifest: %w", err)
 	}
 
@@ -151,7 +151,7 @@ func writeBrowserHostWrapperWithHost(session, browserLogPath string, levels []st
 // points at a different session's wrapper whose tmux session is still alive.
 func refuseClobberActiveWrapper(desiredWrapper string) error {
 	desiredWrapper = filepath.Clean(desiredWrapper)
-	paths, err := natmsg.ReadManifestPaths()
+	paths, err := manifest.ReadManifestPaths()
 	if err != nil && len(paths) == 0 {
 		// No manifests installed yet — nothing to clobber.
 		return nil
@@ -218,7 +218,7 @@ func generateBatchScript(hostPath, absLogPath string, levels []string) string {
 }
 
 func restoreBrowserHostWrapper(session string) {
-	hostPath, err := natmsg.FindDevlogHostBinary()
+	hostPath, err := manifest.FindDevlogHostBinary()
 	if err != nil {
 		return
 	}
@@ -232,12 +232,12 @@ func restoreBrowserHostWrapperWithHost(session, hostPath string) {
 	wrapperPath := browserHostWrapperPath(session)
 
 	// Restore if our wrapper is referenced, or if any path is missing (stale).
-	inUse, err := natmsg.IsManifestPathInUse(wrapperPath)
+	inUse, err := manifest.IsManifestPathInUse(wrapperPath)
 	if err == nil && inUse {
-		_ = natmsg.UpdateManifestPath(hostPath)
+		_ = manifest.UpdateManifestPath(hostPath)
 	} else {
 		// Also repair any other stale missing paths back to the real binary.
-		_, _ = natmsg.RepairStaleManifestPaths(hostPath)
+		_, _ = manifest.RepairStaleManifestPaths(hostPath)
 	}
 
 	_ = os.Remove(wrapperPath)

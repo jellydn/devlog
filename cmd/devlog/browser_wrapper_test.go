@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jellydn/devlog/internal/natmsg"
+	"github.com/jellydn/devlog/internal/manifest"
 )
 
 func withIsolatedHome(t *testing.T) (home string, cleanup func()) {
@@ -46,7 +46,7 @@ func withIsolatedHome(t *testing.T) (home string, cleanup func()) {
 
 func readChromePath(t *testing.T) string {
 	t.Helper()
-	manifestPath := filepath.Join(natmsg.GetChromeNativeMessagingDir(), natmsg.ManifestFileName)
+	manifestPath := filepath.Join(manifest.GetChromeNativeMessagingDir(), manifest.ManifestFileName)
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
 		t.Fatalf("read manifest: %v", err)
@@ -70,7 +70,7 @@ func TestBrowserHostWrapper_RoundTrip(t *testing.T) {
 	}
 	logPath := filepath.Join(tmp, "browser.log")
 
-	if err := natmsg.InstallChromeManifest(hostPath, "testid"); err != nil {
+	if err := manifest.InstallChromeManifest(hostPath, "testid"); err != nil {
 		t.Fatalf("install: %v", err)
 	}
 
@@ -113,7 +113,7 @@ func TestBrowserHostWrapper_StaleRecovery(t *testing.T) {
 	}
 	logPath := filepath.Join(tmp, "browser.log")
 
-	if err := natmsg.InstallChromeManifest(hostPath, "testid"); err != nil {
+	if err := manifest.InstallChromeManifest(hostPath, "testid"); err != nil {
 		t.Fatalf("install: %v", err)
 	}
 
@@ -171,7 +171,7 @@ func TestRefuseClobberActiveWrapper_SameSessionAllowed(t *testing.T) {
 	if err := os.WriteFile(hostPath, []byte("#!/bin/sh\n"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := natmsg.InstallChromeManifest(hostPath, "testid"); err != nil {
+	if err := manifest.InstallChromeManifest(hostPath, "testid"); err != nil {
 		t.Fatal(err)
 	}
 	logPath := filepath.Join(tmp, "b.log")
@@ -196,7 +196,7 @@ func TestRefuseClobberActiveWrapper_OtherLiveSession(t *testing.T) {
 	if err := os.WriteFile(hostPath, []byte("#!/bin/sh\n"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := natmsg.InstallChromeManifest(hostPath, "testid"); err != nil {
+	if err := manifest.InstallChromeManifest(hostPath, "testid"); err != nil {
 		t.Fatal(err)
 	}
 

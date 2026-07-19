@@ -1,6 +1,6 @@
 //go:build windows
 
-package natmsg
+package manifest
 
 import (
 	"fmt"

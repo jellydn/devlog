@@ -1,6 +1,6 @@
 # Architecture
 
-**Analysis Date:** 2026-02-23
+**Analysis Date:** 2026-07-19
 
 ## Pattern Overview
 **Overall:** Multi-binary CLI tool with browser extension sidecar
@@ -16,9 +16,9 @@
 
 **CLI Layer (cmd/devlog):**
 - Purpose: User-facing command dispatcher for managing dev logging sessions
-- Location: `cmd/devlog/main.go`
-- Contains: Command definitions (`cmdUp`, `cmdDown`, `cmdAttach`, `cmdStatus`, `cmdLs`, `cmdOpen`, `cmdInit`, `cmdRegister`, `cmdHealthcheck`), config discovery, shell wrapper generation
-- Depends on: `internal/config`, `internal/tmux`, `internal/natmsg`
+- Location: `cmd/devlog/main.go` (dispatcher) + `cmd/devlog/cmd_*.go` (one file per command) + `cmd/devlog/helpers.go` (shared helpers)
+- Contains: Command definitions (`cmdUp`, `cmdDown`, `cmdAttach`, `cmdStatus`, `cmdLs`, `cmdOpen`, `cmdInit`, `cmdRegister`, `cmdHealthcheck`), config discovery (`findConfigFile`), shell wrapper generation
+- Depends on: `internal/config`, `internal/tmux`, `internal/natmsg`, `internal/shellescape`
 - Used by: End users via terminal
 
 **Native Messaging Host Layer (cmd/devlog-host):**
@@ -90,7 +90,7 @@
 
 **Command Function Type:**
 - Purpose: Uniform interface for all CLI subcommands
-- Examples: `cmd/devlog/main.go` — `type Command func(cfg *config.Config, args []string) error`
+- Examples: `cmd/devlog/main.go` — `type Command func(cfg *config.Config, args []string) error`; handlers implemented in `cmd/devlog/cmd_*.go`
 - Pattern: Function-as-value command dispatch via `map[string]Command`
 
 **tmux.Runner:**
@@ -111,7 +111,7 @@
 ## Entry Points
 
 **devlog CLI:**
-- Location: `cmd/devlog/main.go`
+- Location: `cmd/devlog/main.go` (dispatcher) + `cmd/devlog/cmd_*.go` (handlers)
 - Triggers: User invokes `devlog <command>` from terminal
 - Responsibilities: Parse args, find and load config, dispatch to command handler
 
@@ -158,4 +158,4 @@
 - Supports Chrome, Brave, Firefox, and Zen browser
 
 ---
-*Architecture analysis: 2026-02-23*
+*Architecture analysis: 2026-07-19*

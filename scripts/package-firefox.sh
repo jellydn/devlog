@@ -19,7 +19,7 @@ VERSION=$(cat "$EXTENSION_DIR/VERSION")
 echo "Version: $VERSION"
 
 # Update manifest.json with version from VERSION file
-sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" "$FIREFOX_DIR/manifest.json"
+sed -i.bak "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" "$FIREFOX_DIR/manifest.json" && rm -f "$FIREFOX_DIR/manifest.json.bak"
 
 # Create temporary build directory
 BUILD_DIR=$(mktemp -d)

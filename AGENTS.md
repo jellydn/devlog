@@ -22,7 +22,10 @@ just init           # Copy devlog.yml.example -> devlog.yml
 - `cmd/devlog-host` — Native Messaging host binary the browser extension talks to via stdin. Has OS-specific files `validate_host_unix.go` / `validate_host_windows.go` (build-tagged).
 - `internal/config` — YAML config loading/validation.
 - `internal/tmux` — tmux session management; holds the only integration tests (`-tags=integration`).
-- `internal/natmsg` — native messaging protocol + manifest generation.
+- `internal/natmsg` — native messaging wire protocol (length-prefixed JSON over stdin/stdout).
+- `internal/manifest` — browser manifest registration for Chrome, Brave, and Firefox.
+- `internal/browsersession` — browser-log capture lifecycle (wrapper scripts, clobber protection, health checks).
+- `internal/logrotate` — log directory cleanup based on retention policy.
 - `internal/logger`, `internal/shellescape` — support packages.
 - `browser-extension/` — separate Node package (Chrome + Firefox). Own `npm ci` / `npm test`, not Go.
 

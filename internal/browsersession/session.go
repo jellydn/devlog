@@ -77,20 +77,29 @@ func (s *Session) Stop(sessionName string) {
 func (s *Session) HealthCheck() (*HealthResult, error) {
 	result := &HealthResult{}
 
+	s.discoverHost(result)
+	s.checkRegisteredBrowsers(result)
+	s.repairAndCountPaths(result)
+
+	return result, nil
+}
+
+// discoverHost finds the devlog-host binary and records whether it exists.
+func (s *Session) discoverHost(result *HealthResult) {
 	hostPath, err := s.manifest.FindDevlogHostBinary()
 	if err != nil {
 		result.HostFound = false
-	} else {
-		result.HostFound = true
-		result.HostPath = hostPath
+		return
 	}
+	result.HostFound = true
+	result.HostPath = hostPath
+}
 
+// checkRegisteredBrowsers checks which browsers have native messaging manifests
+// installed and records them in the result.
+func (s *Session) checkRegisteredBrowsers(result *HealthResult) {
 	chromeManifestPath := filepath.Join(s.manifest.GetChromeNativeMessagingDir(), "com.devlog.host.json")
 	braveManifestPath := filepath.Join(s.manifest.GetBraveNativeMessagingDir(), "com.devlog.host.json")
-	firefoxManifestPaths := []string{}
-	for _, dir := range s.manifest.GetFirefoxNativeMessagingDirs() {
-		firefoxManifestPaths = append(firefoxManifestPaths, filepath.Join(dir, "com.devlog.host.json"))
-	}
 
 	if _, err := os.Stat(chromeManifestPath); err == nil {
 		result.Registered = append(result.Registered, "Chrome")
@@ -98,22 +107,25 @@ func (s *Session) HealthCheck() (*HealthResult, error) {
 	if _, err := os.Stat(braveManifestPath); err == nil {
 		result.Registered = append(result.Registered, "Brave")
 	}
-	for _, path := range firefoxManifestPaths {
-		if _, err := os.Stat(path); err == nil {
+	for _, dir := range s.manifest.GetFirefoxNativeMessagingDirs() {
+		if _, err := os.Stat(filepath.Join(dir, "com.devlog.host.json")); err == nil {
 			result.Registered = append(result.Registered, "Firefox")
 			break
 		}
 	}
+}
 
+// repairAndCountPaths repairs stale manifest paths and counts total/stale manifest entries.
+func (s *Session) repairAndCountPaths(result *HealthResult) {
 	if result.HostFound {
-		if repaired, err := s.manifest.RepairStaleManifestPaths(hostPath); err == nil && repaired > 0 {
+		if repaired, err := s.manifest.RepairStaleManifestPaths(result.HostPath); err == nil && repaired > 0 {
 			result.RepairedPaths = repaired
 		}
 	}
 
 	paths, pathErr := s.manifest.ReadManifestPaths()
 	if pathErr != nil && len(paths) == 0 {
-		return result, nil
+		return
 	}
 	result.ManifestPaths = len(paths)
 	for _, p := range paths {
@@ -121,7 +133,6 @@ func (s *Session) HealthCheck() (*HealthResult, error) {
 			result.StalePaths++
 		}
 	}
-	return result, nil
 }
 
 func (s *Session) start(session, browserLogPath string, levels []string, hostPath string) error {

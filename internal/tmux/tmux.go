@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jellydn/devlog/internal/config"
+	"github.com/jellydn/devlog/internal/fileutil"
 	"github.com/jellydn/devlog/internal/shellescape"
 )
 
@@ -123,17 +124,8 @@ func ensurePaneLogFiles(logsDir string, windows []config.WindowConfig) error {
 			}
 			seen[logPath] = struct{}{}
 
-			logDir := filepath.Dir(logPath)
-			if err := os.MkdirAll(logDir, 0755); err != nil {
-				return fmt.Errorf("failed to create log directory '%s': %w", logDir, err)
-			}
-
-			f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
-			if err != nil {
+			if err := fileutil.TouchFile(logPath); err != nil {
 				return fmt.Errorf("failed to create log file '%s': %w", logPath, err)
-			}
-			if err := f.Close(); err != nil {
-				return fmt.Errorf("failed to close log file '%s': %w", logPath, err)
 			}
 		}
 	}

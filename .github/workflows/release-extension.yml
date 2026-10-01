@@ -1,0 +1,152 @@
+name: Release Extension
+
+on:
+  push:
+    tags: ["ext-v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Extension version (leave empty to use VERSION file)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    name: Test extension
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: browser-extension
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: browser-extension/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Run extension tests
+        run: npm test
+
+  package:
+    name: Package extensions
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read or set version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "${{ inputs.version }}" > browser-extension/VERSION
+          fi
+          VERSION=$(cat browser-extension/VERSION)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Update manifest versions
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          sed -i 's/"version": "[^"]*"/"version": "'"$VERSION"'"/' browser-extension/chrome/manifest.json
+          sed -i 's/"version": "[^"]*"/"version": "'"$VERSION"'"/' browser-extension/firefox/manifest.json
+
+      - name: Package Chrome
+        run: bash scripts/package-chrome.sh
+
+      - name: Package Firefox
+        run: bash scripts/package-firefox.sh
+
+      - name: Upload Chrome artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: devlog-chrome
+          path: dist/devlog-chrome-v*.zip
+
+      - name: Upload Firefox artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: devlog-firefox
+          path: dist/devlog-firefox-v*.zip
+
+  publish-chrome:
+    name: Publish Chrome Web Store
+    needs: package
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+      - uses: actions/download-artifact@v4
+        with:
+          name: devlog-chrome
+          path: dist/
+      - name: Upload to Chrome Web Store
+        run: |
+          ZIP=$(ls dist/devlog-chrome-v*.zip)
+          npx chrome-webstore-upload-cli upload \
+            --source "$ZIP" \
+            --extension-id "$EXTENSION_ID" \
+            --auto-publish
+        env:
+          CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          EXTENSION_ID: ${{ vars.CHROME_EXTENSION_ID }}
+
+  publish-firefox:
+    name: Publish Firefox Add-ons
+    needs: package
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+      - name: Update manifest version
+        run: |
+          VERSION="${{ needs.package.outputs.version }}"
+          sed -i 's/"version": "[^"]*"/"version": "'"$VERSION"'"/' browser-extension/firefox/manifest.json
+      - name: Sign and publish to Firefox Add-ons
+        run: |
+          npx web-ext sign \
+            --source-dir browser-extension/firefox \
+            --channel listed
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.FIREFOX_JWT_ISSUER }}
+          WEB_EXT_API_SECRET: ${{ secrets.FIREFOX_JWT_SECRET }}
+
+  release:
+    name: Create GitHub Release
+    needs: [package, publish-chrome, publish-firefox]
+    if: always() && needs.package.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: devlog-chrome
+          path: dist/
+      - uses: actions/download-artifact@v4
+        with:
+          name: devlog-firefox
+          path: dist/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: dist/*.zip
+          generate_release_notes: true
+          body: |
+            ## Store Publish Status
+            - Chrome Web Store: ${{ needs.publish-chrome.result }}
+            - Firefox Add-ons: ${{ needs.publish-firefox.result }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -27,7 +27,7 @@ func cmdUp(cfg *config.Config, args []string) error {
 		policy := logrotate.Policy{MaxRuns: cfg.MaxRuns, RetentionDays: cfg.RetentionDays}
 		if result, err := logrotate.Cleanup(cfg.LogsDir, policy, false); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to cleanup old runs: %v\n", err)
-		} else if result != nil {
+		} else {
 			for _, dir := range result.Removed {
 				fmt.Printf("Removed old log directory: %s\n", dir)
 			}

@@ -3,6 +3,8 @@ package main
 import (
 	"os"
 	"path/filepath"
+
+	"github.com/jellydn/devlog/internal/fileutil"
 )
 
 // maxFindConfigDepth limits how far findConfigFile walks up the directory tree.
@@ -35,12 +37,5 @@ func findConfigFile() string {
 }
 
 func ensureFileExists(path string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return err
-	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		return err
-	}
-	return f.Close()
+	return fileutil.TouchFile(path)
 }

@@ -9,9 +9,40 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 )
+
+// userHomeDir is replaced in tests that need a missing home directory.
+var userHomeDir = os.UserHomeDir
+
+var chromeExtensionIDPattern = regexp.MustCompile(`^[a-p]{32}$`)
+var firefoxExtensionIDPattern = regexp.MustCompile(`^(\{[0-9a-fA-F-]{36}\}|[A-Za-z0-9._+-]+@[A-Za-z0-9.-]+)$`)
+
+func userHome() (string, error) {
+	home, err := userHomeDir()
+	if err != nil || home == "" || home == string(filepath.Separator) {
+		return "", fmt.Errorf("user home directory is not available")
+	}
+	return home, nil
+}
+
+// ValidateChromeExtensionID checks the unpacked-extension id form Chrome uses.
+func ValidateChromeExtensionID(id string) error {
+	if !chromeExtensionIDPattern.MatchString(id) {
+		return fmt.Errorf("chrome extension id %q must be 32 characters in the range a-p", id)
+	}
+	return nil
+}
+
+// ValidateFirefoxExtensionID checks an email-like or brace-UUID extension id.
+func ValidateFirefoxExtensionID(id string) error {
+	if !firefoxExtensionIDPattern.MatchString(id) {
+		return fmt.Errorf("firefox extension id %q must be an email-like id or a brace UUID", id)
+	}
+	return nil
+}
 
 type ChromeManifest struct {
 	Name           string   `json:"name"`
@@ -30,16 +61,21 @@ type FirefoxManifest struct {
 }
 
 func GetChromeNativeMessagingDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = "/"
-	}
 	switch runtime.GOOS {
-	case "darwin":
-		return filepath.Join(home, "Library", "Application Support", "Google", "Chrome", "NativeMessagingHosts")
 	case "windows":
+		// APPDATA does not depend on the home directory.
 		return filepath.Join(os.Getenv("APPDATA"), "Google", "Chrome", "NativeMessagingHosts")
+	case "darwin":
+		home, err := userHome()
+		if err != nil {
+			return ""
+		}
+		return filepath.Join(home, "Library", "Application Support", "Google", "Chrome", "NativeMessagingHosts")
 	default:
+		home, err := userHome()
+		if err != nil {
+			return ""
+		}
 		xdgConfig := os.Getenv("XDG_CONFIG_HOME")
 		if xdgConfig == "" {
 			xdgConfig = filepath.Join(home, ".config")
@@ -49,16 +85,20 @@ func GetChromeNativeMessagingDir() string {
 }
 
 func GetBraveNativeMessagingDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = "/"
-	}
 	switch runtime.GOOS {
-	case "darwin":
-		return filepath.Join(home, "Library", "Application Support", "BraveSoftware", "Brave-Browser", "NativeMessagingHosts")
 	case "windows":
 		return filepath.Join(os.Getenv("APPDATA"), "BraveSoftware", "Brave-Browser", "NativeMessagingHosts")
+	case "darwin":
+		home, err := userHome()
+		if err != nil {
+			return ""
+		}
+		return filepath.Join(home, "Library", "Application Support", "BraveSoftware", "Brave-Browser", "NativeMessagingHosts")
 	default:
+		home, err := userHome()
+		if err != nil {
+			return ""
+		}
 		xdgConfig := os.Getenv("XDG_CONFIG_HOME")
 		if xdgConfig == "" {
 			xdgConfig = filepath.Join(home, ".config")
@@ -68,7 +108,11 @@ func GetBraveNativeMessagingDir() string {
 }
 
 func GetFirefoxNativeMessagingDir() string {
-	return getFirefoxDirs()[0]
+	dirs := getFirefoxDirs()
+	if len(dirs) == 0 {
+		return ""
+	}
+	return dirs[0]
 }
 
 func GetFirefoxNativeMessagingDirs() []string {
@@ -76,12 +120,12 @@ func GetFirefoxNativeMessagingDirs() []string {
 }
 
 func getFirefoxDirs() []string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = "/"
-	}
+	home, homeErr := userHome()
 	switch runtime.GOOS {
 	case "darwin":
+		if homeErr != nil {
+			return nil
+		}
 		return []string{
 			filepath.Join(home, "Library", "Application Support", "Mozilla", "NativeMessagingHosts"),
 			filepath.Join(home, "Library", "Application Support", "zen", "NativeMessagingHosts"),
@@ -93,6 +137,9 @@ func getFirefoxDirs() []string {
 			filepath.Join(appdata, "zen", "NativeMessagingHosts"),
 		}
 	default:
+		if homeErr != nil {
+			return nil
+		}
 		xdgConfig := os.Getenv("XDG_CONFIG_HOME")
 		if xdgConfig == "" {
 			xdgConfig = filepath.Join(home, ".config")
@@ -111,6 +158,9 @@ func installChromiumManifest(dir, hostPath, extensionID, label string) error {
 		return fmt.Errorf("%s extension ID is required", label)
 	}
 	if err := ValidateHostPath(hostPath); err != nil {
+		return err
+	}
+	if err := ValidateChromeExtensionID(extensionID); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -153,6 +203,9 @@ func InstallFirefoxManifest(hostPath string) error {
 func InstallFirefoxManifestWithID(hostPath string, extensionID string) error {
 	if extensionID == "" {
 		return fmt.Errorf("Firefox extension ID is required")
+	}
+	if err := ValidateFirefoxExtensionID(extensionID); err != nil {
+		return err
 	}
 	if err := ValidateHostPath(hostPath); err != nil {
 		return err

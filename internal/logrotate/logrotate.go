@@ -6,9 +6,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"time"
 )
+
+// runDirName matches directories created by timestamped runs, including a same-second suffix.
+var runDirName = regexp.MustCompile(`^\d{8}-\d{6}(-\d+)?$`)
 
 // Policy defines retention rules for timestamped log directories.
 type Policy struct {
@@ -53,7 +57,7 @@ func Cleanup(logsDir string, policy Policy, dryRun bool) (*Result, error) {
 	var dirs []dirInfo
 
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		if !entry.IsDir() || !runDirName.MatchString(entry.Name()) {
 			continue
 		}
 		info, err := entry.Info()

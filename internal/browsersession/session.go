@@ -4,10 +4,14 @@
 package browsersession
 
 import (
+	"bufio"
+	"encoding/hex"
 	"fmt"
+	"hash/fnv"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/jellydn/devlog/internal/shellescape"
@@ -33,8 +37,10 @@ type SessionChecker interface {
 
 // Session manages the browser-log wrapper lifecycle for one devlog session.
 type Session struct {
-	manifest ManifestOps
-	tmux     SessionChecker
+	manifest    ManifestOps
+	tmux        SessionChecker
+	URLs        []string
+	MaxLogBytes int64
 }
 
 // New creates a Session with the given dependencies.
@@ -72,8 +78,8 @@ func (s *Session) Stop(sessionName string) {
 	s.stop(sessionName, hostPath)
 }
 
-// HealthCheck verifies the host binary exists, manifests are registered,
-// and manifest paths point at existing files (repairing stale paths).
+// HealthCheck verifies the host binary exists and reports stale manifest paths.
+// It does not rewrite manifests. devlog up and devlog down do that.
 func (s *Session) HealthCheck() (*HealthResult, error) {
 	result := &HealthResult{}
 
@@ -115,14 +121,9 @@ func (s *Session) checkRegisteredBrowsers(result *HealthResult) {
 	}
 }
 
-// repairAndCountPaths repairs stale manifest paths and counts total/stale manifest entries.
+// repairAndCountPaths counts manifest entries. A missing file, or a wrapper
+// whose tmux session is gone, is stale. This method does not write.
 func (s *Session) repairAndCountPaths(result *HealthResult) {
-	if result.HostFound {
-		if repaired, err := s.manifest.RepairStaleManifestPaths(result.HostPath); err == nil && repaired > 0 {
-			result.RepairedPaths = repaired
-		}
-	}
-
 	paths, pathErr := s.manifest.ReadManifestPaths()
 	if pathErr != nil && len(paths) == 0 {
 		return
@@ -130,6 +131,10 @@ func (s *Session) repairAndCountPaths(result *HealthResult) {
 	result.ManifestPaths = len(paths)
 	for _, p := range paths {
 		if _, err := os.Stat(p); err != nil {
+			result.StalePaths++
+			continue
+		}
+		if session, ok := readWrapperSession(p); ok && s.tmux != nil && !s.tmux.SessionExists(session) {
 			result.StalePaths++
 		}
 	}
@@ -142,13 +147,7 @@ func (s *Session) start(session, browserLogPath string, levels []string, hostPat
 
 	// Self-heal: if a previous unclean shutdown left manifests pointing at a
 	// missing wrapper, restore them to the real binary before we rewrite.
-	if _, err := s.manifest.RepairStaleManifestPaths(hostPath); err != nil {
-		// Non-fatal when no manifests exist yet.
-		if !strings.Contains(err.Error(), "failed to read some manifests") &&
-			!strings.Contains(err.Error(), "no native messaging") {
-			// continue; UpdateManifestPath will report clearer errors
-		}
-	}
+	_, _ = s.manifest.RepairStaleManifestPaths(hostPath)
 
 	absLogPath, err := filepath.Abs(browserLogPath)
 	if err != nil {
@@ -166,9 +165,9 @@ func (s *Session) start(session, browserLogPath string, levels []string, hostPat
 
 	var script string
 	if runtime.GOOS == "windows" {
-		script = generateBatchScript(hostPath, absLogPath, levels)
+		script = generateBatchScript(session, hostPath, absLogPath, levels, s.URLs, s.MaxLogBytes)
 	} else {
-		script = generateShellScript(hostPath, absLogPath, levels)
+		script = generateShellScript(session, hostPath, absLogPath, levels, s.URLs, s.MaxLogBytes)
 	}
 	if err := os.WriteFile(wrapperPath, []byte(script), 0700); err != nil {
 		return err
@@ -210,7 +209,10 @@ func (s *Session) refuseClobberActiveWrapper(desiredWrapper string) error {
 		if current == desiredWrapper {
 			continue
 		}
-		otherSession, ok := sessionFromWrapperPath(current)
+		otherSession, ok := readWrapperSession(current)
+		if !ok {
+			otherSession, ok = sessionFromWrapperPath(current)
+		}
 		if !ok {
 			continue
 		}
@@ -241,7 +243,7 @@ func browserHostWrapperPath(session string) string {
 		cacheDir,
 		"devlog",
 		"wrappers",
-		fmt.Sprintf("devlog-host-wrapper-%s%s", sanitizeSessionForFileName(session), browserHostWrapperExt()),
+		fmt.Sprintf("devlog-host-wrapper-%s-%08x%s", sanitizeSessionForFileName(session), sessionHash(session), browserHostWrapperExt()),
 	)
 }
 
@@ -291,28 +293,79 @@ func sessionFromWrapperPath(path string) (string, bool) {
 	return name, true
 }
 
-func generateShellScript(hostPath, absLogPath string, levels []string) string {
-	// Build script with proper shell escaping. exec replaces the shell with the host.
-	var scriptArgs []string
-	scriptArgs = append(scriptArgs, shellescape.Quote(hostPath), shellescape.Quote(absLogPath))
-	for _, level := range levels {
-		scriptArgs = append(scriptArgs, shellescape.Quote(level))
-	}
-	return fmt.Sprintf("#!/bin/sh\nexec %s\n", strings.Join(scriptArgs, " "))
+func sessionHash(session string) uint32 {
+	sum := fnv.New32a()
+	_, _ = sum.Write([]byte(session))
+	return sum.Sum32()
 }
 
-func generateBatchScript(hostPath, absLogPath string, levels []string) string {
-	// Native messaging on Windows can invoke a .bat host wrapper.
-	var scriptArgs []string
-	scriptArgs = append(scriptArgs, batchQuote(hostPath), batchQuote(absLogPath))
-	for _, level := range levels {
-		scriptArgs = append(scriptArgs, batchQuote(level))
+func sessionMarker(session string) string {
+	return hex.EncodeToString([]byte(session))
+}
+
+func readWrapperSession(path string) (string, bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", false
 	}
-	return "@echo off\r\n" + strings.Join(scriptArgs, " ") + "\r\n"
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for i := 0; i < 8 && scanner.Scan(); i++ {
+		line := strings.TrimSpace(scanner.Text())
+		var payload string
+		switch {
+		case strings.HasPrefix(line, "# devlog-session:"):
+			payload = strings.TrimSpace(strings.TrimPrefix(line, "# devlog-session:"))
+		case strings.HasPrefix(strings.ToLower(line), "rem devlog-session:"):
+			payload = strings.TrimSpace(line[len("rem devlog-session:"):])
+		default:
+			continue
+		}
+		raw, decErr := hex.DecodeString(payload)
+		if decErr != nil || len(raw) == 0 {
+			continue
+		}
+		return string(raw), true
+	}
+	return "", false
+}
+
+func generateShellScript(session, hostPath, absLogPath string, levels, urls []string, maxBytes int64) string {
+	args := []string{shellescape.Quote(hostPath), shellescape.Quote(absLogPath)}
+	for _, level := range levels {
+		args = append(args, shellescape.Quote(level))
+	}
+	args = append(args, hostFlagArgs(urls, maxBytes, shellescape.Quote)...)
+	return fmt.Sprintf("#!/bin/sh\n# devlog-session: %s\nif ! tmux has-session -t %s 2>/dev/null; then\n  exit 0\nfi\nexec %s\n",
+		sessionMarker(session), shellescape.Quote(session), strings.Join(args, " "))
+}
+
+func generateBatchScript(session, hostPath, absLogPath string, levels, urls []string, maxBytes int64) string {
+	args := []string{batchQuote(hostPath), batchQuote(absLogPath)}
+	for _, level := range levels {
+		args = append(args, batchQuote(level))
+	}
+	args = append(args, hostFlagArgs(urls, maxBytes, batchQuote)...)
+	return "@echo off\r\nrem devlog-session: " + sessionMarker(session) +
+		"\r\ntmux has-session -t " + batchQuote(session) + " >nul 2>&1\r\nif errorlevel 1 exit /b 0\r\n" +
+		strings.Join(args, " ") + "\r\n"
+}
+
+func hostFlagArgs(urls []string, maxBytes int64, quote func(string) string) []string {
+	var args []string
+	if maxBytes > 0 {
+		args = append(args, "--max-bytes", quote(strconv.FormatInt(maxBytes, 10)))
+	}
+	for _, pattern := range urls {
+		args = append(args, "--url", quote(pattern))
+	}
+	return args
 }
 
 // batchQuote returns a Windows batch-escaped argument using double quotes.
-// Embedded double quotes are escaped by doubling them.
+// % is still expanded inside quotes. Newlines would start a new command.
 func batchQuote(s string) string {
+	s = strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ", "%", "%%").Replace(s)
 	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
 }

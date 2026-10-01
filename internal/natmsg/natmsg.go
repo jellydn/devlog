@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +14,10 @@ import (
 	"strings"
 	"time"
 )
+
+// ErrOversizedMessage means the length prefix is above the native-messaging cap.
+// The body is left unread. Callers must stop using the stream.
+var ErrOversizedMessage = errors.New("oversized native message")
 
 // Timestamp represents a flexible timestamp that can be unmarshaled from
 // various JSON formats (string, number) and provides a time.Time value.
@@ -132,10 +137,15 @@ func parseOptionalInt(raw json.RawMessage) (*int, error) {
 	return nil, fmt.Errorf("must be a number or numeric string")
 }
 
-// Response represents a response message sent back to the browser
+// Response represents a message sent back to the browser.
+// Type is ACK for a log acknowledgement and CONFIG for capture settings.
 type Response struct {
-	Success bool   `json:"success"`
-	Error   string `json:"error,omitempty"`
+	Type    string   `json:"type,omitempty"`
+	Success bool     `json:"success"`
+	Error   string   `json:"error,omitempty"`
+	URLs    []string `json:"urls,omitempty"`
+	Levels  []string `json:"levels,omitempty"`
+	Enabled bool     `json:"enabled,omitempty"`
 }
 
 // Host handles native messaging communication
@@ -177,9 +187,10 @@ func (h *Host) ReadMessage() (*Message, error) {
 		return nil, fmt.Errorf("invalid message length: 0")
 	}
 
-	// Sanity check: messages shouldn't be larger than 10MB
+	// Sanity check: messages shouldn't be larger than 10MB.
+	// Do not read the body: the declared length can be larger than the stream.
 	if messageLen > 10*1024*1024 {
-		return nil, fmt.Errorf("message too large: %d bytes", messageLen)
+		return nil, fmt.Errorf("%w: %d bytes", ErrOversizedMessage, messageLen)
 	}
 
 	// Read the message body
@@ -222,5 +233,5 @@ func (h *Host) WriteResponse(response Response) error {
 
 // SendAck sends a simple acknowledgment response
 func (h *Host) SendAck(success bool, errMsg string) error {
-	return h.WriteResponse(Response{Success: success, Error: errMsg})
+	return h.WriteResponse(Response{Type: "ACK", Success: success, Error: errMsg})
 }

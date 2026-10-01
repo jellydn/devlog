@@ -4,6 +4,7 @@ builds:
   - id: devlog
     main: ./cmd/devlog
     binary: devlog
+    # Windows is compiled in CI. It is not a release target.
     goos: [linux, darwin]
     goarch: [amd64, arm64]
     ldflags:
@@ -12,6 +13,7 @@ builds:
   - id: devlog-host
     main: ./cmd/devlog-host
     binary: devlog-host
+    # Windows is compiled in CI. It is not a release target.
     goos: [linux, darwin]
     goarch: [amd64, arm64]
     ldflags:

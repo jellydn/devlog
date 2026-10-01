@@ -1,6 +1,6 @@
 # Privacy Policy for devlog Browser Extension
 
-**Last Updated:** February 14, 2026
+**Last Updated:** October 1, 2026
 
 ## Overview
 
@@ -10,7 +10,7 @@ The devlog browser extension ("the Extension") is a developer tool designed to c
 
 ### What Data is Collected
 
-The Extension collects the following data **only from web pages that match the configured URL patterns** in your `devlog.yml` configuration file:
+The content script is loaded on every page so the URL list in `devlog.yml` can change without a new extension package. The console hook is installed only after the page URL matches those patterns. The Extension then collects:
 
 - Browser console logs (console.log, console.error, console.warn, console.info, console.debug)
 - Uncaught JavaScript errors and stack traces
@@ -27,7 +27,7 @@ The Extension does **NOT** collect:
 - Cookies or authentication tokens
 - Form data or user inputs
 - Network requests or responses
-- Any data from web pages that don't match your configured URL patterns
+- Console output from pages that do not match your configured URL patterns. The hook is not installed there. A few milliseconds at the start of a matching page can still be missed, before the hook is installed
 
 ## Data Usage
 
@@ -55,10 +55,10 @@ Browser console capture uses Chromium/Firefox **Native Messaging**:
 
 1. **Primary trust boundary — extension allowlist.** Each installed `com.devlog.host.json` lists which extension IDs may launch the host (`allowed_origins` on Chrome/Brave, `allowed_extensions` on Firefox). The browser enforces this before spawning the host.
 2. **Host path rewrite.** `devlog up` may rewrite the manifest `path` field to a per-session wrapper under `os.UserCacheDir()/devlog/wrappers/`. The wrapper only exists so the host receives the active log file path and level filters. `devlog down` restores `path` to the real `devlog-host` binary.
-3. **Owner-only files.** Manifests are written with mode `0600` and wrappers with mode `0700`. On Unix, `devlog` refuses to register or rewrite a host path that is not owned by the current user.
+3. **Owner-only files.** Manifests are written with mode `0600` and wrappers with mode `0700`. Log files created by devlog are mode `0600` and log directories are mode `0700`. On Unix, `devlog` refuses a host path that is not owned by the current user, or that is writable by the group or by others. The Windows check only requires that the path exists and is not a directory, because the Go file mode does not report ACLs.
 4. **Local only.** The host never opens network sockets; it only appends to the local log file configured for the session.
 
-If a session ends uncleanly and the wrapper is missing, run `devlog healthcheck` or `devlog up` again — stale missing paths are repaired back to the real binary when possible.
+`devlog healthcheck` reports a missing path or a wrapper whose tmux session is gone. It does not rewrite manifests. `devlog up` repairs a missing path. A wrapper whose tmux session is already gone exits without writing.
 
 ## Data Storage Location
 
@@ -81,9 +81,8 @@ You have full control over:
 The Extension requires the following permissions:
 
 - **`nativeMessaging`**: Required to communicate with the local `devlog-host` native application that writes logs to disk
-- **`storage`**: Used to store your extension configuration (URL patterns, log levels) locally in the browser
-- **`activeTab`**: Allows the extension to read console logs from the currently active browser tab
-- **`<all_urls>`** (host permissions): Required to inject the log capture script into pages matching your configured URL patterns
+- **`storage`**: Stores only the boolean pause flag (`devlogEnabled`). URL patterns and log levels come from `devlog.yml` through the native host, not from extension storage
+- **`<all_urls>`** (host permissions): Required so the content script can ask, per frame, whether that URL is in `devlog.yml`. The console hook runs only when the answer is yes
 
 These permissions are used **exclusively** for the functionality described above. No data is sent to external servers.
 

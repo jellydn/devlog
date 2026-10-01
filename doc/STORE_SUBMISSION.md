@@ -58,9 +58,8 @@ Upload these assets in the developer dashboard:
 - **Privacy Policy URL**: `https://github.com/jellydn/devlog/blob/main/PRIVACY.md`
 - **Justification for Permissions**:
   - `nativeMessaging`: Required to communicate with local devlog-host application
-  - `storage`: Stores user configuration for URL patterns and log levels
-  - `activeTab`: Reads console logs from active tab
-  - `<all_urls>`: Required to inject log capture on user-configured URLs
+  - `storage`: Stores only the pause flag
+  - `<all_urls>`: Loads the content script. The console hook runs only on URLs from `devlog.yml`
 
 ### 6. Submit for Review
 

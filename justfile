@@ -5,21 +5,23 @@
 default:
     @just --list
 
-# Build the binary
+# Build both binaries
 build:
     go build -o devlog ./cmd/devlog
+    go build -o devlog-host ./cmd/devlog-host
 
 # Run the CLI (pass args after --)
 run *args:
     go run ./cmd/devlog {{args}}
 
-# Install locally
+# Install both binaries locally
 install:
     go install ./cmd/devlog
+    go install ./cmd/devlog-host
 
 # Clean build artifacts
 clean:
-    rm -f devlog
+    rm -f devlog devlog-host
 
 # Run all tests
 test:
@@ -60,12 +62,18 @@ vet:
 # Run all linting (fmt + vet)
 lint: fmt vet
 
-# Check if code compiles without building
+# Check if both binaries compile without writing them
 check:
     go build -o /dev/null ./cmd/devlog
+    go build -o /dev/null ./cmd/devlog-host
 
-# Run full CI checks (lint + test)
-ci: lint test
+# Match the Ubuntu GitHub job: lint, race, integration, e2e, both binaries
+ci: lint
+    go test -race ./...
+    go test -tags=integration ./internal/tmux/
+    go test -tags=e2e ./internal/e2e/
+    go build -o /dev/null ./cmd/devlog
+    go build -o /dev/null ./cmd/devlog-host
 
 # Build and symlink to ~/.local/bin for easy testing
 devlog-dev:

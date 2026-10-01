@@ -19,8 +19,8 @@ Options considered:
 ## Decision
 
 Support both modes via `run_mode` in the YAML config:
-- `timestamped` (default): Creates `logs/YYYY-MM-DD_HH-MM-SS/` per run
-- `overwrite`: Writes directly to `logs/`, replacing previous output
+- `timestamped` (default): Creates `logs/YYYYMMDD-HHMMSS/` per run. A second start in the same second uses `logs/YYYYMMDD-HHMMSS-2/`
+- `overwrite`: Writes directly to `logs/`. Existing pane logs are truncated when the run starts, then appended for the rest of the run
 
 ## Consequences
 
@@ -31,5 +31,5 @@ Support both modes via `run_mode` in the YAML config:
 - User chooses the behavior that fits their workflow
 
 ### Negative
-- Timestamped mode can accumulate disk usage over time (no automatic cleanup in MVP)
+- Timestamped mode can accumulate disk usage. Optional `max_runs` and `retention_days` delete only directories named like a timestamped run. `max_log_bytes` caps the browser log. Server pane logs from `pipe-pane` are not size-capped
 - Two modes mean slightly more code and config surface

@@ -31,4 +31,4 @@ Use tmux as the process manager. Create sessions/windows/panes via `tmux` CLI co
 ### Negative
 - Requires tmux to be installed
 - Not usable by developers who don't use terminal multiplexers
-- `pipe-pane` captures raw terminal output (may include ANSI escape codes)
+- `pipe-pane` captures raw terminal output (may include ANSI escape codes), including the prompt and the typed command. Those files are not size-capped. The browser log is the file with `max_log_bytes`

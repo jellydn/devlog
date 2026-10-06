@@ -46,21 +46,26 @@ func (r *Runner) SessionExists() bool {
 // CreateSession creates a new tmux session with the given windows and panes.
 // It resolves the logs directory from cfg (timestamped subdirectory when needed),
 // stores it on the Runner, and exports DEVLOG_LOGS_DIR in the tmux session env.
-func (r *Runner) CreateSession(cfg SessionConfig) error {
+// A failure after the session is created kills that session.
+func (r *Runner) CreateSession(cfg SessionConfig) (err error) {
 	if r.SessionExists() {
 		return fmt.Errorf("tmux session '%s' already exists", r.sessionName)
 	}
 
-	logsDir := cfg.LogsDir
-	if cfg.RunMode == "timestamped" {
-		logsDir = filepath.Join(cfg.LogsDir, time.Now().Format("20060102-150405"))
+	logsDir, err := resolveRunLogsDir(cfg.LogsDir, cfg.RunMode, time.Now())
+	if err != nil {
+		return err
 	}
-	r.logsDir = logsDir
+	absLogsDir, err := filepath.Abs(logsDir)
+	if err != nil {
+		return fmt.Errorf("failed to resolve absolute path for logs dir: %w", err)
+	}
+	r.logsDir = absLogsDir
 
-	if err := os.MkdirAll(logsDir, 0755); err != nil {
+	if err = os.MkdirAll(absLogsDir, fileutil.DirMode); err != nil {
 		return fmt.Errorf("failed to create logs directory: %w", err)
 	}
-	if err := ensurePaneLogFiles(logsDir, cfg.Windows); err != nil {
+	if err = ensurePaneLogFiles(absLogsDir, cfg.Windows, cfg.RunMode == "overwrite"); err != nil {
 		return err
 	}
 
@@ -71,38 +76,40 @@ func (r *Runner) CreateSession(cfg SessionConfig) error {
 	firstWindow := cfg.Windows[0]
 	firstPane := firstWindow.Panes[0]
 
-	cmd := exec.Command("tmux", "new-session", "-d", "-s", r.sessionName, "-n", firstWindow.Name)
-	if err := cmd.Run(); err != nil {
+	var sessionStarted bool
+	defer func() {
+		if err != nil && sessionStarted {
+			_ = exec.Command("tmux", "kill-session", "-t", r.sessionName).Run()
+		}
+	}()
+
+	// -P prints the window id. Later commands target that id, not the name,
+	// so names that contain tmux target punctuation cannot select the wrong window.
+	out, err := exec.Command("tmux", "new-session", "-d", "-P", "-F", "#{window_id}", "-s", r.sessionName, "-n", firstWindow.Name).Output()
+	if err != nil {
 		return fmt.Errorf("failed to create tmux session: %w", err)
 	}
+	sessionStarted = true
+	firstWindowID := strings.TrimSpace(string(out))
 
-	// Store logs directory as a tmux session environment variable for later retrieval
-	// Convert to absolute path to ensure consistent resolution from any working directory
-	absLogsDir, err := filepath.Abs(logsDir)
-	if err != nil {
-		return fmt.Errorf("failed to resolve absolute path for logs dir: %w", err)
-	}
-	setEnv := exec.Command("tmux", "set-environment", "-t", r.sessionName, "DEVLOG_LOGS_DIR", absLogsDir)
-	if err := setEnv.Run(); err != nil {
+	if err = exec.Command("tmux", "set-environment", "-t", r.sessionName, "DEVLOG_LOGS_DIR", absLogsDir).Run(); err != nil {
 		return fmt.Errorf("failed to set logs dir env: %w", err)
 	}
 
-	// Use window name in target - tmux will target the active pane in that window
-	firstWindowTarget := fmt.Sprintf("%s:%s", r.sessionName, firstWindow.Name)
-	if err := r.sendCommandWithLogging(firstWindowTarget, firstPane.Cmd, firstPane.Log); err != nil {
+	if err = r.sendCommandWithLogging(firstWindowID, firstPane.Cmd, firstPane.Log); err != nil {
 		return fmt.Errorf("failed to run command in first pane: %w", err)
 	}
 
 	for i := 1; i < len(firstWindow.Panes); i++ {
 		pane := firstWindow.Panes[i]
-		if err := r.splitWindow(firstWindowTarget, pane.Cmd, pane.Log); err != nil {
+		if err = r.splitWindow(firstWindowID, pane.Cmd, pane.Log); err != nil {
 			return fmt.Errorf("failed to create pane %d in window %s: %w", i, firstWindow.Name, err)
 		}
 	}
 
 	for i := 1; i < len(cfg.Windows); i++ {
 		window := cfg.Windows[i]
-		if err := r.createWindow(i, window); err != nil {
+		if err = r.createWindow(window); err != nil {
 			return fmt.Errorf("failed to create window %s: %w", window.Name, err)
 		}
 	}
@@ -110,7 +117,28 @@ func (r *Runner) CreateSession(cfg SessionConfig) error {
 	return nil
 }
 
-func ensurePaneLogFiles(logsDir string, windows []config.WindowConfig) error {
+// resolveRunLogsDir picks the directory for this run.
+// Timestamped names are YYYYMMDD-HHMMSS. A second start in the same second gets a -N suffix.
+func resolveRunLogsDir(base, runMode string, now time.Time) (string, error) {
+	if runMode != "timestamped" {
+		return base, nil
+	}
+	stamp := now.Format("20060102-150405")
+	dir := filepath.Join(base, stamp)
+	for n := 2; n < 10000; n++ {
+		_, statErr := os.Stat(dir)
+		if os.IsNotExist(statErr) {
+			return dir, nil
+		}
+		if statErr != nil {
+			return "", fmt.Errorf("failed to stat log directory: %w", statErr)
+		}
+		dir = filepath.Join(base, fmt.Sprintf("%s-%d", stamp, n))
+	}
+	return "", fmt.Errorf("too many log directories for timestamp %s", stamp)
+}
+
+func ensurePaneLogFiles(logsDir string, windows []config.WindowConfig, truncate bool) error {
 	seen := make(map[string]struct{})
 	for _, window := range windows {
 		for _, pane := range window.Panes {
@@ -118,13 +146,16 @@ func ensurePaneLogFiles(logsDir string, windows []config.WindowConfig) error {
 				continue
 			}
 
-			logPath := filepath.Join(logsDir, pane.Log)
+			logPath, err := fileutil.SafeJoin(logsDir, pane.Log)
+			if err != nil {
+				return err
+			}
 			if _, ok := seen[logPath]; ok {
 				continue
 			}
 			seen[logPath] = struct{}{}
 
-			if err := fileutil.TouchFile(logPath); err != nil {
+			if err := fileutil.PrepareLogFile(logPath, truncate); err != nil {
 				return fmt.Errorf("failed to create log file '%s': %w", logPath, err)
 			}
 		}
@@ -132,23 +163,25 @@ func ensurePaneLogFiles(logsDir string, windows []config.WindowConfig) error {
 	return nil
 }
 
-// createWindow creates a new window with its panes
-func (r *Runner) createWindow(windowIndex int, window config.WindowConfig) error {
-	cmd := exec.Command("tmux", "new-window", "-t", r.sessionName, "-n", window.Name)
-	if err := cmd.Run(); err != nil {
+// createWindow creates a new window with its panes and returns once each pane command is sent.
+func (r *Runner) createWindow(window config.WindowConfig) error {
+	out, err := exec.Command("tmux", "new-window", "-P", "-F", "#{window_id}", "-t", r.sessionName, "-n", window.Name).Output()
+	if err != nil {
 		return fmt.Errorf("failed to create window: %w", err)
 	}
+	if len(window.Panes) == 0 {
+		return fmt.Errorf("window %s has no panes", window.Name)
+	}
 
-	// Target the window by name - tmux will use the active pane
+	windowID := strings.TrimSpace(string(out))
 	firstPane := window.Panes[0]
-	windowTarget := fmt.Sprintf("%s:%s", r.sessionName, window.Name)
-	if err := r.sendCommandWithLogging(windowTarget, firstPane.Cmd, firstPane.Log); err != nil {
+	if err := r.sendCommandWithLogging(windowID, firstPane.Cmd, firstPane.Log); err != nil {
 		return fmt.Errorf("failed to run command in first pane: %w", err)
 	}
 
 	for i := 1; i < len(window.Panes); i++ {
 		pane := window.Panes[i]
-		if err := r.splitWindow(windowTarget, pane.Cmd, pane.Log); err != nil {
+		if err := r.splitWindow(windowID, pane.Cmd, pane.Log); err != nil {
 			return fmt.Errorf("failed to create pane %d: %w", i, err)
 		}
 	}
@@ -156,27 +189,32 @@ func (r *Runner) createWindow(windowIndex int, window config.WindowConfig) error
 	return nil
 }
 
-// splitWindow splits the current window and runs a command with logging
+// splitWindow splits the window horizontally, then vertically if the window is too narrow.
 func (r *Runner) splitWindow(target string, command, logFile string) error {
-	cmd := exec.Command("tmux", "split-window", "-h", "-t", target)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to split window: %w", err)
+	if err := exec.Command("tmux", "split-window", "-h", "-t", target).Run(); err != nil {
+		if errV := exec.Command("tmux", "split-window", "-v", "-t", target).Run(); errV != nil {
+			return fmt.Errorf("failed to split window: %w", errV)
+		}
 	}
 
-	// After split-window, the new pane is active, so we can send to the window
-	if err := r.sendCommandWithLogging(target, command, logFile); err != nil {
+	// After split-window, the new pane is active, so the window target hits that pane.
+	return r.sendCommandWithLogging(target, command, logFile)
+}
+
+// sendCommandWithLogging waits for the pane process, then captures output and sends the command.
+func (r *Runner) sendCommandWithLogging(target, command, logFile string) error {
+	if err := waitForPaneProcess(target); err != nil {
 		return err
 	}
 
-	return nil
-}
-
-// sendCommandWithLogging sends a command to a pane with output captured via pipe-pane
-func (r *Runner) sendCommandWithLogging(target, command, logFile string) error {
 	if logFile != "" {
-		logPath := filepath.Join(r.logsDir, logFile)
+		logPath, err := fileutil.SafeJoin(r.logsDir, logFile)
+		if err != nil {
+			return err
+		}
 
-		// Quote the path to prevent command injection
+		// Quote the path to prevent command injection. Append within the run.
+		// Overwrite mode truncates the file before the session starts.
 		pipeCmd := fmt.Sprintf("cat >> %s", shellescape.Quote(logPath))
 		cmd := exec.Command("tmux", "pipe-pane", "-t", target, "-o", pipeCmd)
 		if err := cmd.Run(); err != nil {
@@ -195,47 +233,59 @@ func (r *Runner) sendCommandWithLogging(target, command, logFile string) error {
 	return nil
 }
 
-// KillSession gracefully terminates all panes and kills the tmux session
+// waitForPaneProcess returns when the pane has a current command, or after two seconds.
+func waitForPaneProcess(target string) error {
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		out, err := exec.Command("tmux", "display-message", "-p", "-t", target, "#{pane_current_command}").Output()
+		if err == nil && strings.TrimSpace(string(out)) != "" {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timed out waiting for pane %s to start", target)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// KillSession sends SIGINT to every pane in every window, waits, then kills the session.
+// kill-session is what ends processes that ignore SIGINT. A second Ctrl-C is not a force kill.
 func (r *Runner) KillSession() error {
 	if !r.SessionExists() {
 		return fmt.Errorf("tmux session '%s' does not exist", r.sessionName)
 	}
 
-	paneIDs, err := r.getPaneIDs()
-	if err != nil {
-		return fmt.Errorf("failed to get pane list: %w", err)
+	paneIDs, paneErr := r.getPaneIDs()
+	if paneErr == nil {
+		signalPanes(paneIDs)
+		// Wait in the Go process so the grace period is deterministic.
+		time.Sleep(500 * time.Millisecond)
 	}
 
-	// Send Ctrl+C to all panes to gracefully terminate processes
-	for _, paneID := range paneIDs {
-		target := fmt.Sprintf("%s:%s", r.sessionName, paneID)
-		cmd := exec.Command("tmux", "send-keys", "-t", target, "C-c")
-		cmd.Run() // Ignore errors - pane might not have a process
-	}
-
-	// Wait in the Go process so the grace period is deterministic.
-	// (send-keys "sleep 0.5" runs inside a pane shell and does not block KillSession.)
-	time.Sleep(500 * time.Millisecond)
-
-	// Force kill any remaining processes with C-c again
-	for _, paneID := range paneIDs {
-		target := fmt.Sprintf("%s:%s", r.sessionName, paneID)
-		cmd := exec.Command("tmux", "send-keys", "-t", target, "C-c")
-		cmd.Run()
-	}
-
-	// Kill the session (this will close all panes and flush logs)
 	cmd := exec.Command("tmux", "kill-session", "-t", r.sessionName)
 	if err := cmd.Run(); err != nil {
+		if paneErr != nil {
+			return fmt.Errorf("failed to get pane list: %w", paneErr)
+		}
 		return fmt.Errorf("failed to kill tmux session: %w", err)
 	}
-
+	if paneErr != nil {
+		return fmt.Errorf("tmux session killed, but pane signals were not sent: %w", paneErr)
+	}
 	return nil
 }
 
-// getPaneIDs returns all pane IDs in the session
+// signalPanes sends Ctrl-C to each pane id. Pane ids look like %7 and are already
+// global targets. Prefixing the session name makes tmux read %7 as a window name.
+func signalPanes(paneIDs []string) {
+	for _, paneID := range paneIDs {
+		_ = exec.Command("tmux", "send-keys", "-t", paneID, "C-c").Run()
+	}
+}
+
+// getPaneIDs returns pane ids for every window in the session.
 func (r *Runner) getPaneIDs() ([]string, error) {
-	cmd := exec.Command("tmux", "list-panes", "-t", r.sessionName, "-F", "#{pane_id}")
+	cmd := exec.Command("tmux", "list-panes", "-s", "-t", r.sessionName, "-F", "#{pane_id}")
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, err

@@ -179,6 +179,35 @@ func TestCleanup_NoPolicy(t *testing.T) {
 	}
 }
 
+func TestCleanup_SkipsNonTimestampDirs(t *testing.T) {
+	logsDir := t.TempDir()
+	keep := filepath.Join(logsDir, "notes")
+	drop := filepath.Join(logsDir, "20240101-120000")
+	if err := os.MkdirAll(keep, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(drop, 0755); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().AddDate(0, 0, -40)
+	if err := os.Chtimes(keep, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(drop, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Cleanup(logsDir, Policy{RetentionDays: 1}, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(keep); err != nil {
+		t.Errorf("non-timestamp directory was removed: %v", err)
+	}
+	if _, err := os.Stat(drop); !os.IsNotExist(err) {
+		t.Errorf("timestamp directory still exists: %v", err)
+	}
+}
+
 func TestCleanup_MissingLogsDir(t *testing.T) {
 	result, err := Cleanup(filepath.Join(t.TempDir(), "missing"), Policy{MaxRuns: 3}, false)
 	if err != nil {

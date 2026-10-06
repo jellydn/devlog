@@ -18,14 +18,14 @@ Options considered:
 
 ## Decision
 
-Use append-only writes. Each log source writes to its own dedicated file. No file locking is needed because each file has exactly one writer.
+Use append-only writes. Two tmux panes may name the same log file. Both use `cat >>`. That can interleave lines. The browser host is a separate writer on its own file. Overwrite mode truncates a file once at the start of the run, then appends.
 
 ## Consequences
 
 ### Positive
 - Simplest possible implementation — just `os.OpenFile` with `O_APPEND`
 - No coordination or locking overhead
-- No risk of file corruption from concurrent access (single writer per file)
+- No lock manager. Shared pane files can interleave lines, which is acceptable for text logs
 - Easy to `tail -f` for real-time monitoring
 
 ### Negative

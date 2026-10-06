@@ -155,6 +155,76 @@ tmux:
 	}
 }
 
+func TestLoad_EnvNewlineDoesNotAddKeys(t *testing.T) {
+	os.Setenv("DEVLOG_CMD", "echo hi\n  extra: true")
+	defer os.Unsetenv("DEVLOG_CMD")
+
+	content := `
+version: "1.0"
+project: myapp
+tmux:
+  session: dev
+  windows:
+    - name: server
+      panes:
+        - cmd: $DEVLOG_CMD
+          log: server.log
+`
+
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "devlog.yml")
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	if cfg.Project != "myapp" {
+		t.Errorf("project = %q, want myapp", cfg.Project)
+	}
+	if len(cfg.Tmux.Windows) != 1 || len(cfg.Tmux.Windows[0].Panes) != 1 {
+		t.Fatalf("windows/panes changed shape: %+v", cfg.Tmux.Windows)
+	}
+	cmd := cfg.Tmux.Windows[0].Panes[0].Cmd
+	if !strings.Contains(cmd, "echo hi") || !strings.Contains(cmd, "extra:") {
+		t.Errorf("cmd = %q, want the newline value kept inside the scalar", cmd)
+	}
+}
+
+func TestLoad_MaxRunsFromIntegerEnv(t *testing.T) {
+	os.Setenv("MAX_RUNS", "3")
+	defer os.Unsetenv("MAX_RUNS")
+
+	content := `
+version: "1.0"
+project: myapp
+max_runs: $MAX_RUNS
+tmux:
+  session: dev
+  windows:
+    - name: server
+      panes:
+        - cmd: echo test
+          log: server.log
+`
+
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "devlog.yml")
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	if cfg.MaxRuns != 3 {
+		t.Errorf("MaxRuns = %d, want 3", cfg.MaxRuns)
+	}
+}
+
 func TestLoad_MissingRequiredFields(t *testing.T) {
 	tests := []struct {
 		name    string

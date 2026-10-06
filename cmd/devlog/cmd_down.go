@@ -21,13 +21,13 @@ func cmdDown(cfg *config.Config, args []string) error {
 		return fmt.Errorf("tmux session '%s' does not exist", cfg.Tmux.Session)
 	}
 
-	// Kill the session
-	if err := runner.KillSession(); err != nil {
+	// Kill the session, then always restore the manifest. A failed kill must
+	// not leave the browser pointed at this session's wrapper.
+	err := runner.KillSession()
+	bs.Stop(cfg.Tmux.Session)
+	if err != nil {
 		return err
 	}
-
-	// Restore native messaging manifest to point to the real binary
-	bs.Stop(cfg.Tmux.Session)
 
 	fmt.Printf("Stopped tmux session '%s'\n", cfg.Tmux.Session)
 

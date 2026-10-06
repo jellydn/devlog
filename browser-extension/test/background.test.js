@@ -71,6 +71,15 @@ describe("background.js", () => {
 			resp = r;
 		});
 		expect(resp.enabled).toBe(false);
+
+		handler(
+			{ type: "GET_CONFIG", url: "https://evil.example/?q=http://localhost:1/x" },
+			{},
+			(r) => {
+				resp = r;
+			},
+		);
+		expect(resp.enabled).toBe(false);
 	});
 
 	it("connects to native host and forwards LOG messages", () => {

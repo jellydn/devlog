@@ -2,13 +2,20 @@ document.addEventListener("DOMContentLoaded", () => {
 	const statusEl = document.getElementById("status");
 	const urlsEl = document.getElementById("urls");
 	const footerEl = document.getElementById("footer");
+	const toggleEl = document.getElementById("toggle");
 
-	chrome.runtime.sendMessage({ type: "GET_STATUS" }, (response) => {
+	function render(response) {
 		if (chrome.runtime.lastError || !response) {
 			statusEl.textContent = "Unable to connect";
 			statusEl.className = "status disabled";
 			footerEl.textContent = "Extension error. Check console for details.";
+			if (toggleEl) toggleEl.hidden = true;
 			return;
+		}
+
+		if (toggleEl) {
+			toggleEl.hidden = false;
+			toggleEl.textContent = response.enabled ? "Pause capture" : "Resume capture";
 		}
 
 		if (response.enabled && response.connected) {
@@ -19,7 +26,6 @@ document.addEventListener("DOMContentLoaded", () => {
 			statusEl.textContent = "Native host not connected";
 			statusEl.className = "status disabled";
 			footerEl.textContent = "Run: devlog register";
-			// Add troubleshooting link
 			const helpLink = document.createElement("a");
 			helpLink.href =
 				"https://github.com/jellydn/devlog/blob/main/browser-extension/README.md";
@@ -46,5 +52,23 @@ document.addEventListener("DOMContentLoaded", () => {
 			urlsEl.innerHTML = "";
 			urlsEl.appendChild(ul);
 		}
-	});
+	}
+
+	function refresh() {
+		chrome.runtime.sendMessage({ type: "GET_STATUS" }, render);
+	}
+
+	if (toggleEl) {
+		toggleEl.addEventListener("click", () => {
+			chrome.runtime.sendMessage({ type: "GET_STATUS" }, (response) => {
+				if (chrome.runtime.lastError || !response) return;
+				chrome.runtime.sendMessage(
+					{ type: "SET_ENABLED", enabled: !response.enabled },
+					refresh,
+				);
+			});
+		});
+	}
+
+	refresh();
 });

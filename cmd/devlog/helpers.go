@@ -23,6 +23,11 @@ func findConfigFile() string {
 		if _, err := os.Stat(configPath); err == nil {
 			return configPath
 		}
+		// Stop at a git root that has no devlog.yml so a parent project
+		// is not selected by accident.
+		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			return ""
+		}
 
 		// Go up one directory
 		parent := filepath.Dir(dir)

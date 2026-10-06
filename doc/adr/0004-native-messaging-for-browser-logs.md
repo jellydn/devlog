@@ -18,7 +18,7 @@ Options considered:
 
 ## Decision
 
-Use Chrome's Native Messaging protocol. A Go binary acts as the native host, receiving JSON log events over stdin (4-byte little-endian length-prefixed) and appending formatted lines to the configured log file.
+Use Chrome's Native Messaging protocol. A Go binary acts as the native host, receiving JSON log events over stdin (4-byte length prefix in native byte order, which is what Chrome requires) and appending formatted lines to the configured log file. The extension can capture every matching tab. One `com.devlog.host` manifest name is shared by every browser on the machine, so only one browser-log session runs at a time. Chrome's MV3 service worker can suspend; an open native port keeps it alive, and the next log reconnects after a suspend. There is no `chrome.alarms` keepalive.
 
 ## Consequences
 
@@ -31,4 +31,4 @@ Use Chrome's Native Messaging protocol. A Go binary acts as the native host, rec
 ### Negative
 - Requires installing a browser extension (manual for MVP)
 - Requires registering a native host manifest in an OS-specific location
-- MVP captures only a single tab at a time
+- One native host name per machine, so two projects cannot capture browser consoles at the same time

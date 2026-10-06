@@ -77,9 +77,8 @@ Use this checklist when publishing the devlog browser extension to Chrome Web St
 - [ ] Single purpose description
 - [ ] Permission justifications:
   - **nativeMessaging**: Communicates with local devlog-host binary to write logs
-  - **storage**: Stores user configuration (URL patterns, log levels)
-  - **activeTab**: Reads console logs from active browser tabs
-  - **<all_urls>**: Required to inject content script on user-configured URLs
+  - **storage**: Stores only the pause flag
+  - **<all_urls>**: Loads the content script. The console hook runs only on URLs from `devlog.yml`
 
 ### Distribution
 

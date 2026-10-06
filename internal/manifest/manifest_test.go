@@ -2,6 +2,7 @@ package manifest
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -50,7 +51,7 @@ func TestInstallBraveManifest_CreatesManifestFile(t *testing.T) {
 	// Arrange
 	tmpDir := t.TempDir()
 	hostPath := filepath.Join(tmpDir, "devlog-host")
-	extensionID := "testextensionid"
+	extensionID := "abcdefghijklmnopabcdefghijklmnop"
 
 	// Create fake host binary
 	if err := os.WriteFile(hostPath, []byte("#! fake binary"), 0755); err != nil {
@@ -86,7 +87,7 @@ func TestInstallBraveManifest_CreatesValidManifestContent(t *testing.T) {
 	// Arrange
 	tmpDir := t.TempDir()
 	hostPath := filepath.Join(tmpDir, "devlog-host")
-	extensionID := "abc123def456"
+	extensionID := "abcdefghijklmnopabcdefghijklmnop"
 
 	if err := os.WriteFile(hostPath, []byte("#! fake binary"), 0755); err != nil {
 		t.Fatalf("failed to create fake host binary: %v", err)
@@ -237,7 +238,7 @@ func TestInstallBraveManifest_ManifestMode0600(t *testing.T) {
 	defer os.Setenv("XDG_CONFIG_HOME", xdg)
 	os.Unsetenv("XDG_CONFIG_HOME")
 
-	if err := InstallBraveManifest(hostPath, "testid"); err != nil {
+	if err := InstallBraveManifest(hostPath, "abcdefghijklmnopabcdefghijklmnop"); err != nil {
 		t.Fatalf("InstallBraveManifest: %v", err)
 	}
 	manifestPath := filepath.Join(GetBraveNativeMessagingDir(), ManifestFileName)
@@ -272,7 +273,7 @@ func TestRepairStaleManifestPaths(t *testing.T) {
 	defer os.Setenv("XDG_CONFIG_HOME", xdg)
 	os.Unsetenv("XDG_CONFIG_HOME")
 
-	if err := InstallChromeManifest(hostPath, "ext"); err != nil {
+	if err := InstallChromeManifest(hostPath, "abcdefghijklmnopabcdefghijklmnop"); err != nil {
 		t.Fatalf("install: %v", err)
 	}
 	// Point manifest at a missing wrapper
@@ -305,40 +306,59 @@ func TestRepairStaleManifestPaths(t *testing.T) {
 }
 
 func TestGetChromeNativeMessagingDir_FallbackToHomeOnError(t *testing.T) {
-	// This test verifies the behavior when os.UserHomeDir() fails
-	// by checking that the function still returns a valid path
-
-	// Act
-	dir := GetChromeNativeMessagingDir()
-
-	// Assert
-	if dir == "" {
-		t.Error("expected non-empty directory path even if UserHomeDir fails")
+	orig := userHomeDir
+	userHomeDir = func() (string, error) {
+		return "", fmt.Errorf("no home")
 	}
+	t.Cleanup(func() { userHomeDir = orig })
 
-	// On error, the function should fall back to "/" + platform-specific paths
-	if runtime.GOOS == "darwin" {
-		if !strings.Contains(dir, "Chrome") {
-			t.Errorf("expected 'Chrome' in path on darwin, got: %s", dir)
+	dir := GetChromeNativeMessagingDir()
+	if runtime.GOOS == "windows" {
+		if os.Getenv("APPDATA") != "" && dir == "" {
+			t.Fatal("windows chrome dir should use APPDATA when home is unavailable")
 		}
+		return
+	}
+	if dir != "" {
+		t.Fatalf("GetChromeNativeMessagingDir() = %q, want empty when home is unavailable", dir)
 	}
 }
 
 func TestGetFirefoxNativeMessagingDirs_FallbackToHomeOnError(t *testing.T) {
-	// Act
-	dirs := GetFirefoxNativeMessagingDirs()
-
-	// Assert
-	if len(dirs) == 0 {
-		t.Error("expected at least one Firefox directory")
+	orig := userHomeDir
+	userHomeDir = func() (string, error) {
+		return "", fmt.Errorf("no home")
 	}
+	t.Cleanup(func() { userHomeDir = orig })
 
-	for _, dir := range dirs {
-		if dir == "" {
-			t.Error("expected non-empty directory path")
+	dirs := GetFirefoxNativeMessagingDirs()
+	if runtime.GOOS == "windows" {
+		if len(dirs) == 0 {
+			t.Fatal("windows firefox dirs should not depend on the home directory")
 		}
-		if !filepath.IsAbs(dir) {
-			t.Errorf("expected absolute path, got: %s", dir)
-		}
+		return
+	}
+	if len(dirs) != 0 {
+		t.Fatalf("dirs = %v, want none when home is unavailable", dirs)
+	}
+	if GetFirefoxNativeMessagingDir() != "" {
+		t.Fatal("GetFirefoxNativeMessagingDir indexed an empty directory list")
+	}
+}
+
+func TestValidateHostPath_GroupWritable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix permission bits are not meaningful on Windows")
+	}
+	path := filepath.Join(t.TempDir(), "host")
+	if err := os.WriteFile(path, []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	// Chmod after create so the process umask cannot clear the group-write bit.
+	if err := os.Chmod(path, 0666); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateHostPath(path); err == nil {
+		t.Fatal("expected error for a group-writable host path")
 	}
 }

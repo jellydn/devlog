@@ -17,6 +17,7 @@ func cmdRegister(cfg *config.Config, args []string) error {
 	installBrave := false
 	installFirefox := false
 	extensionID := ""
+	firefoxExtensionID := ""
 
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -34,6 +35,13 @@ func cmdRegister(cfg *config.Config, args []string) error {
 			} else {
 				return fmt.Errorf("--extension-id requires a value")
 			}
+		case "--firefox-id":
+			if i+1 < len(args) {
+				firefoxExtensionID = args[i+1]
+				i++
+			} else {
+				return fmt.Errorf("--firefox-id requires a value")
+			}
 		case "--help", "-h":
 			fmt.Print(`Usage: devlog register [options]
 
@@ -43,14 +51,15 @@ Options:
   --chrome         Register for Google Chrome
   --brave          Register for Brave Browser
   --firefox        Register for Mozilla Firefox
-  --extension-id   Chrome/Brave extension ID (required for --chrome or --brave)
+  --extension-id   Chrome/Brave extension ID (32 characters, a-p)
+  --firefox-id     Firefox extension ID (default devlog@devlog.local)
   --help, -h       Show this help message
 
 Examples:
-  devlog register --chrome --extension-id abcdefghijklmnopqrstuvwxyz123456
-  devlog register --brave --extension-id abcdefghijklmnopqrstuvwxyz123456
+  devlog register --chrome --extension-id abcdefghijklmnopabcdefghijklmnop
+  devlog register --brave --extension-id abcdefghijklmnopabcdefghijklmnop
   devlog register --firefox
-  devlog register --chrome --brave --extension-id abcdefghijklmnopqrstuvwxyz123456
+  devlog register --chrome --brave --extension-id abcdefghijklmnopabcdefghijklmnop
 `)
 			return nil
 		default:
@@ -91,12 +100,10 @@ Examples:
 
 	if installFirefox {
 		fmt.Printf("Registering for Firefox...\n")
-		// Use extension ID if provided, otherwise use default
-		firefoxExtID := extensionID
-		if firefoxExtID == "" {
-			firefoxExtID = "devlog@devlog.local"
+		if firefoxExtensionID == "" {
+			firefoxExtensionID = "devlog@devlog.local"
 		}
-		if err := manifest.InstallFirefoxManifestWithID(hostPath, firefoxExtID); err != nil {
+		if err := manifest.InstallFirefoxManifestWithID(hostPath, firefoxExtensionID); err != nil {
 			return fmt.Errorf("failed to register Firefox manifest: %w", err)
 		}
 		dirs := manifest.GetFirefoxNativeMessagingDirs()
@@ -104,9 +111,7 @@ Examples:
 		for _, dir := range dirs {
 			fmt.Printf("    - %s\n", dir)
 		}
-		if extensionID != "" {
-			fmt.Printf("  Extension ID: %s\n", extensionID)
-		}
+		fmt.Printf("  Extension ID: %s\n", firefoxExtensionID)
 	}
 
 	fmt.Println("Registration complete!")

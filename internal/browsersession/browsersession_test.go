@@ -112,7 +112,7 @@ func TestBrowserHostWrapper_RoundTrip(t *testing.T) {
 	}
 	logPath := filepath.Join(tmp, "browser.log")
 
-	if err := manifest.InstallChromeManifest(hostPath, "testid"); err != nil {
+	if err := manifest.InstallChromeManifest(hostPath, "abcdefghijklmnopabcdefghijklmnop"); err != nil {
 		t.Fatalf("install: %v", err)
 	}
 
@@ -156,7 +156,7 @@ func TestBrowserHostWrapper_StaleRecovery(t *testing.T) {
 	}
 	logPath := filepath.Join(tmp, "browser.log")
 
-	if err := manifest.InstallChromeManifest(hostPath, "testid"); err != nil {
+	if err := manifest.InstallChromeManifest(hostPath, "abcdefghijklmnopabcdefghijklmnop"); err != nil {
 		t.Fatalf("install: %v", err)
 	}
 
@@ -215,7 +215,7 @@ func TestRefuseClobberActiveWrapper_SameSessionAllowed(t *testing.T) {
 	if err := os.WriteFile(hostPath, []byte("#!/bin/sh\n"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := manifest.InstallChromeManifest(hostPath, "testid"); err != nil {
+	if err := manifest.InstallChromeManifest(hostPath, "abcdefghijklmnopabcdefghijklmnop"); err != nil {
 		t.Fatal(err)
 	}
 	logPath := filepath.Join(tmp, "b.log")
@@ -241,7 +241,7 @@ func TestRefuseClobberActiveWrapper_OtherLiveSession(t *testing.T) {
 	if err := os.WriteFile(hostPath, []byte("#!/bin/sh\n"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := manifest.InstallChromeManifest(hostPath, "testid"); err != nil {
+	if err := manifest.InstallChromeManifest(hostPath, "abcdefghijklmnopabcdefghijklmnop"); err != nil {
 		t.Fatal(err)
 	}
 

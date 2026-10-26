@@ -185,6 +185,34 @@ func TestRun_MalformedMessageContinues(t *testing.T) {
 	}
 }
 
+func TestRun_OversizedMessageIsFatal(t *testing.T) {
+	tmpDir := t.TempDir()
+	logPath := filepath.Join(tmpDir, "browser.log")
+
+	var stdin bytes.Buffer
+	lengthBytes := make([]byte, 4)
+	binary.NativeEndian.PutUint32(lengthBytes, 11*1024*1024)
+	stdin.Write(lengthBytes)
+	stdin.Write([]byte("not-a-body"))
+	stdin.Write(encodeNativeMessage(t, sampleMessage("error", "should-not-log")))
+
+	var stdout, stderr bytes.Buffer
+	err := run([]string{logPath}, &stdin, &stdout, &stderr)
+	if !errors.Is(err, natmsg.ErrOversizedMessage) {
+		t.Fatalf("run() error = %v, want ErrOversizedMessage", err)
+	}
+	if !strings.Contains(stderr.String(), "Error reading message:") {
+		t.Errorf("stderr = %q, want read error", stderr.String())
+	}
+	content, readErr := os.ReadFile(logPath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if strings.Contains(string(content), "should-not-log") {
+		t.Errorf("oversized frame was not fatal, log = %q", content)
+	}
+}
+
 func TestRun_LoggerCreateFailure(t *testing.T) {
 	// Use a path under a file so MkdirAll/OpenFile fails
 	tmpDir := t.TempDir()

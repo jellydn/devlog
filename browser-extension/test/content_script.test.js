@@ -71,6 +71,7 @@ describe("content_script.js", () => {
 
 	it("forwards __devlog postMessage as LOG when enabled", async () => {
 		const { window, chrome } = loadContent();
+		const token = window.document.documentElement.getAttribute("data-devlog-token");
 		// Allow GET_CONFIG callback to apply
 		await new Promise((r) => setTimeout(r, 0));
 
@@ -78,6 +79,7 @@ describe("content_script.js", () => {
 			new window.MessageEvent("message", {
 				data: {
 					__devlog: true,
+					token,
 					level: "error",
 					message: "from page",
 					url: "http://localhost:3000/",
@@ -120,12 +122,14 @@ describe("content_script.js", () => {
 		const { window, chrome } = loadContent({
 			sendMessageResponse: { enabled: true, levels: ["error"] },
 		});
+		const token = window.document.documentElement.getAttribute("data-devlog-token");
 		await new Promise((r) => setTimeout(r, 0));
 
 		window.dispatchEvent(
 			new window.MessageEvent("message", {
 				data: {
 					__devlog: true,
+					token,
 					level: "log",
 					message: "filtered",
 					url: "http://localhost:3000/",

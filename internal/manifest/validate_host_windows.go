@@ -7,7 +7,9 @@ import (
 	"os"
 )
 
-// ValidateHostPath checks that hostPath exists (ownership checks are Unix-only).
+// ValidateHostPath checks that hostPath exists and is not a directory.
+// Windows os.FileMode does not report ACLs, so this build does not reject a
+// file that other users can rewrite. Unix builds check owner and mode.
 func ValidateHostPath(hostPath string) error {
 	info, err := os.Stat(hostPath)
 	if err != nil {

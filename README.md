@@ -171,7 +171,7 @@ Notes for agents:
 - `devlog up` is idempotency-safe only against a missing session — it **errors if a session is already running**. Call `devlog down` first when re-running.
 - Integration/end-to-end log capture needs `tmux` on PATH. The `healthcheck` command confirms it before you start.
 - Browser console capture requires the native host to be registered (`devlog register --chrome --extension-id <ID>` or `--firefox`) and the extension loaded; skip the `browser` block if you only need server logs.
-- Logs land under `logs_dir` (default `./logs`). Prefer `devlog down` (not killing tmux manually) so logs flush and the manifest `path` restores to the real `devlog-host` binary.
+- Logs land under `logs_dir` (default `./logs`). Prefer `devlog down` (not killing tmux manually) so logs flush and the manifest `path` restores to the real `devlog-host` binary. If tmux is killed another way, the wrapper sees the missing session and exits without writing. Only one browser-log session can run per machine, because every browser shares `com.devlog.host`. Chrome extension IDs are 32 characters in `a-p`.
 - Config supports `$VAR` / `${VAR}` interpolation, so you can read ports/paths from the environment.
 
 ## Log Output
@@ -180,13 +180,13 @@ Notes for agents:
 
 ```
 logs/
-  2026-02-10_17-23-11/
+  20260210-172311/
     server/web.log
     server/api.log
     browser/console.log
 ```
 
-With `run_mode: overwrite`, logs write directly to `logs/` without a timestamp subdirectory.
+With `run_mode: overwrite`, logs write directly to `logs/`. `devlog up` truncates those files, then appends for the rest of the run. A second timestamped start in the same second uses a `-2` suffix. `devlog healthcheck` reports a stale manifest. It does not rewrite one. `devlog up` repairs a missing host path.
 
 ### Log Cleanup
 

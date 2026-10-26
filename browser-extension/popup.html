@@ -56,6 +56,16 @@
       color: #999;
       text-align: center;
     }
+    button {
+      width: 100%;
+      margin-top: 8px;
+      padding: 8px 12px;
+      font-size: 13px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: #fff;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -72,6 +82,7 @@
   <div id="urls" class="urls">
     <em>No URLs configured</em>
   </div>
+  <button id="toggle" type="button">Pause capture</button>
   <div id="footer" class="footer"></div>
   <script src="popup.js"></script>
 </body>

@@ -13,10 +13,12 @@ import (
 
 // Logger writes browser console logs to a file with level filtering
 type Logger struct {
-	file    *os.File
-	mu      sync.Mutex
-	levels  map[string]bool
-	logPath string
+	file     *os.File
+	mu       sync.Mutex
+	levels   map[string]bool
+	logPath  string
+	maxBytes int64
+	capped   bool
 }
 
 // New creates a new logger that writes to the specified file.
@@ -24,14 +26,20 @@ type Logger struct {
 // levels is a list of log levels to capture (e.g., ["log", "error", "warn"]).
 // If empty, all levels are captured.
 func New(logPath string, levels []string) (*Logger, error) {
+	return NewWithLimit(logPath, levels, 0)
+}
+
+// NewWithLimit is New with a byte cap. Zero means no cap.
+// Each write goes straight to the file. Close syncs so the last line is not only in the kernel cache.
+func NewWithLimit(logPath string, levels []string, maxBytes int64) (*Logger, error) {
 	// Create log directory if needed
 	dir := filepath.Dir(logPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, fmt.Errorf("failed to create log directory: %w", err)
 	}
 
-	// Open log file (create or append)
-	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	// Open log file (create or append). Mode 0600 keeps console text private.
+	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open log file: %w", err)
 	}
@@ -43,9 +51,10 @@ func New(logPath string, levels []string) (*Logger, error) {
 	}
 
 	return &Logger{
-		file:    file,
-		levels:  levelMap,
-		logPath: logPath,
+		file:     file,
+		levels:   levelMap,
+		logPath:  logPath,
+		maxBytes: maxBytes,
 	}, nil
 }
 
@@ -55,6 +64,7 @@ func (l *Logger) Close() error {
 	defer l.mu.Unlock()
 
 	if l.file != nil {
+		_ = l.file.Sync()
 		return l.file.Close()
 	}
 	return nil
@@ -108,7 +118,19 @@ func (l *Logger) Log(msg *natmsg.Message) error {
 	logLine.WriteString(msg.Message)
 	logLine.WriteString("\n")
 
-	if _, err := l.file.WriteString(logLine.String()); err != nil {
+	line := logLine.String()
+	if l.maxBytes > 0 {
+		info, statErr := l.file.Stat()
+		if statErr == nil && info.Size() >= l.maxBytes {
+			if !l.capped {
+				_, _ = l.file.WriteString("devlog: log size cap reached; further lines were dropped\n")
+				l.capped = true
+			}
+			return nil
+		}
+	}
+
+	if _, err := l.file.WriteString(line); err != nil {
 		return fmt.Errorf("failed to write log: %w", err)
 	}
 

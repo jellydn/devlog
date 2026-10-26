@@ -31,6 +31,7 @@ function loadPageInject() {
 		return origLog(...args);
 	};
 
+	window.document.documentElement.setAttribute("data-devlog-token", "test-token");
 	window.eval(scriptSource);
 	return { window, messages, logCalls };
 }
@@ -56,6 +57,8 @@ describe("page_inject.js", () => {
 		expect(evt.stack).toBeTruthy();
 		expect(evt.url).toContain("localhost:3000");
 		expect(evt.timestamp).toBeTruthy();
+		expect(evt.token).toBe("test-token");
+		expect(devlog[devlog.length - 1].origin).toBe(window.location.origin);
 	});
 
 	it("serializes objects and falls back for circular refs", () => {

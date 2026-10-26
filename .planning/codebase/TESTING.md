@@ -1,318 +1,243 @@
 # Testing Patterns
 
-**Analysis Date:** 2026-07-19
+**Analysis Date:** 2026-10-01
 
 ## Test Framework
 
 **Runner:**
-- Go standard `testing` package (no third-party test framework)
-- Go 1.25+ (`go.mod`)
+
+- Go uses the standard `testing` package. There is no testify, gomega, gomock, or quicktest dependency in `go.mod`. The only non-stdlib test helper beyond `testing` is `testing/quick` in `internal/shellescape/shellescape_test.go`.
+- The browser extension uses Vitest 4 with jsdom (`browser-extension/package.json`, `browser-extension/vitest.config.js`). Tests call `describe`, `it`, `expect`, and sometimes `beforeEach` / `vi` (`browser-extension/test/page_inject.test.js`).
 
 **Assertion Library:**
-- Standard library only — manual `if` checks with `t.Errorf` / `t.Fatalf`
-- No assertion library (no testify, no gomega)
+
+- Go: none. Failures use `t.Fatal`, `t.Fatalf`, `t.Error`, `t.Errorf`, `t.Skip`, and `t.Skipf`. The usual comparison text is `got` / `want`:
+
+```go
+if cfg.Version != "1.0" {
+    t.Errorf("Version = %q, want %q", cfg.Version, "1.0")
+}
+```
+
+That check is from `TestLoad_ValidConfig` in `internal/config/config_test.go`. Setup failures use `Fatalf` so the test stops. Field checks use `Errorf` so later checks still run.
+
+- Extension: Vitest `expect`. Example from `browser-extension/test/background.test.js`:
+
+```js
+expect(status.connected).toBe(false);
+expect(status.enabled).toBe(true);
+```
 
 **Run Commands:**
-```bash
-go test ./...                          # Run all tests
-go test -v ./...                       # Verbose output
-just test-one TestLoad_ValidConfig     # Single test by name
-go test -cover ./...                   # Coverage report
-go test -race ./...                    # Race detection
-go test -tags=integration ./internal/tmux/  # Integration tests
-go test -short ./...                   # Skip integration tests
-just ci                                # Format + vet + all tests
-```
+
+From `justfile`:
+
+- `just test` — `go test ./...` (no race, no `integration` tag, no `e2e` tag).
+- `just test-v` — `go test -v ./...`.
+- `just test-one TestLoad_ValidConfig` — `go test -run {{name}} ./...`.
+- `just test-cover` — `go test -cover ./...`.
+- `just test-race` — `go test -race ./...`.
+- `just test-integration` — `go test -tags=integration ./internal/tmux/`.
+- `just ci` — `just lint` then `just test`. It does not run race, integration, or e2e.
+- `go test -short ./...` does not compile `integration` or `e2e` tests, because those files are build-tagged. It does not skip `internal/tmux/tmux_test.go`. That file has no `testing.Short` check and calls real tmux unless tmux is missing.
+- `go test -short -tags=integration ./internal/tmux/` does skip the integration file. `skipIfNoTmux` in `internal/tmux/integration_test.go` calls `t.Skip("skipping integration test")` when `testing.Short()` is true, and `t.Skip("tmux not available in PATH")` when `exec.LookPath("tmux")` fails.
+
+From `.github/workflows/ci.yml`:
+
+- `test` job: install tmux, `gofmt -l .`, `go vet ./...`, `go test -race -coverprofile=coverage.txt -covermode=atomic ./...`, `go test -tags=integration ./internal/tmux/`, `go test -tags=e2e -v ./internal/e2e/`, then `go build` for `./cmd/devlog` and `./cmd/devlog-host`.
+- `test-extension` job: `working-directory: browser-extension`, Node 24, `npm ci`, `npm test` (`vitest run`).
+- `multi-platform` job: `go test ./...` on Ubuntu, macOS, and Windows. Integration tests run only when `runner.os != 'Windows'`. This job does not run e2e or extension tests.
 
 ## Test File Organization
 
 **Location:**
-- Co-located with source files (same directory, same package)
-- All tests use package-internal access (no `_test` package suffix)
+
+- Go tests are colocated with the package. There is no `testdata/` directory.
+- Unit-style files (default `go test` build):
+  - `internal/config/config_test.go`
+  - `internal/natmsg/natmsg_test.go`
+  - `internal/logger/logger_test.go`
+  - `internal/logrotate/logrotate_test.go`
+  - `internal/manifest/manifest_test.go`
+  - `internal/shellescape/shellescape_test.go`
+  - `internal/fileutil/touchfile_test.go`
+  - `internal/browsersession/browsersession_test.go`
+  - `internal/browsersession/helpers_test.go`
+  - `internal/tmux/tmux_test.go` (real tmux, skip if absent; not behind the integration tag)
+  - `cmd/devlog/init_test.go`, `cmd/devlog/status_test.go`, `cmd/devlog/healthcheck_test.go`
+  - `cmd/devlog-host/main_test.go`
+- Tagged files:
+  - `internal/tmux/integration_test.go` — `//go:build integration`
+  - `internal/e2e/cli_test.go` — `//go:build e2e`
+- Extension tests live under `browser-extension/test/`: `background.test.js`, `content_script.test.js`, `page_inject.test.js`, and `mocks/chrome.js`. Vitest includes only `test/**/*.test.js`.
 
 **Naming:**
-- Test files: `*_test.go` (`config_test.go`, `tmux_test.go`, `logger_test.go`, `natmsg_test.go`)
-- Integration tests: `integration_test.go` with build tag
-- Test functions: `TestFunctionName_Description` pattern (e.g., `TestLoad_ValidConfig`, `TestLoad_MissingRequiredFields`, `TestRunner_CreateSession_AlreadyExists`)
 
-**Files (9 total):**
-- `internal/config/config_test.go` — 18 test functions
-- `internal/tmux/tmux_test.go` — 8 test functions
-- `internal/tmux/integration_test.go` — 12 integration test functions
-- `internal/natmsg/natmsg_test.go` — 17 test functions
-- `internal/natmsg/manifest_test.go` — 7 test functions
-- `internal/logger/logger_test.go` — 10 test functions
-- `cmd/devlog/init_test.go` — 5 test functions
-- `cmd/devlog/status_test.go` — 4 test functions
-- `cmd/devlog/healthcheck_test.go` — 5 test functions
+- Go files are `*_test.go` or the specific names `integration_test.go` and `helpers_test.go`.
+- Go test functions are `TestName_Description`: `TestLoad_MissingRequiredFields`, `TestHost_ReadMessage_EOF`, `TestCleanup_DryRun`, `TestCmdInit_CreatesFile`, `TestRun_RequiresLogPath`, `TestE2E_UpFailsWhenAlreadyRunning`.
+- Extension files are `<script>.test.js`. The `describe` string is the script name (`"background.js"`, `"page_inject.js"`).
+
+**Structure:**
+
+- Every Go test is `package` equal to the code under test (`package config`, `package main`), not an external `foo_test` package. Tests can call unexported functions such as `run`, `cmdInit`, and `start`.
+- Extension tests do not import the scripts as ES modules. They `readFileSync` the source and evaluate it in a `vm` context or a jsdom `window`.
 
 ## Test Structure
 
 **Suite Organization:**
+
+- No `TestMain` except `internal/e2e/cli_test.go`, which builds `../../cmd/devlog` into a temp binary once, stores the path in `binary`, runs `m.Run()`, then deletes the temp dir.
+- No `t.Parallel()` anywhere in `*_test.go`.
+- Subtests use `t.Run` in five places: `internal/config/config_test.go`, `internal/fileutil/touchfile_test.go`, `internal/manifest/manifest_test.go`, `cmd/devlog/init_test.go`, and `internal/tmux/integration_test.go`. Many cases are separate top-level `Test*` functions instead of a table (`internal/logger/logger_test.go`, `internal/natmsg/natmsg_test.go`).
+- Helpers call `t.Helper()`: `encodeMessage` (`internal/natmsg/natmsg_test.go`), `encodeNativeMessage` and `decodeAck` (`cmd/devlog-host/main_test.go`), `withIsolatedHome` and `readChromePath` (`internal/browsersession/browsersession_test.go`), `skipIfNoTmux` and `runDevlog` (`internal/e2e/cli_test.go`).
+
+**Patterns:**
+
+Table-driven validation, from `TestLoad_MissingRequiredFields` in `internal/config/config_test.go`:
+
 ```go
-// Single test case — from internal/config/config_test.go
-func TestLoad_ValidConfig(t *testing.T) {
-	content := `
-version: "1.0"
-project: myapp
-...
-`
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "devlog.yml")
-	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
-		t.Fatalf("Failed to write test config: %v", err)
-	}
-
-	cfg, err := Load(configPath)
-	if err != nil {
-		t.Fatalf("Load() failed: %v", err)
-	}
-
-	if cfg.Version != "1.0" {
-		t.Errorf("Version = %q, want %q", cfg.Version, "1.0")
-	}
+tests := []struct {
+    name    string
+    content string
+    wantErr string
+}{
+    {
+        name:    "missing version",
+        content: `...`,
+        wantErr: "version is required",
+    },
+}
+for _, tt := range tests {
+    t.Run(tt.name, func(t *testing.T) {
+        _, err := Load(configPath)
+        if err == nil {
+            t.Errorf("Load() expected error containing %q, got nil", tt.wantErr)
+            return
+        }
+        if !strings.Contains(err.Error(), tt.wantErr) {
+            t.Errorf("Load() error = %q, want containing %q", err.Error(), tt.wantErr)
+        }
+    })
 }
 ```
 
-**Table-driven tests — from `internal/config/config_test.go`:**
-```go
-func TestLoad_MissingRequiredFields(t *testing.T) {
-	tests := []struct {
-		name    string
-		content string
-		wantErr string
-	}{
-		{
-			name:    "missing version",
-			content: `...`,
-			wantErr: "version is required",
-		},
-		{
-			name:    "missing project",
-			content: `...`,
-			wantErr: "project is required",
-		},
-	}
+`internal/fileutil/touchfile_test.go` uses a smaller table whose case body is a named function (`t.Run(tt.name, tt.fn)`). `internal/browsersession/helpers_test.go` uses an `in` / `want` table with no name field for `TestSanitizeSessionForFileName`.
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tmpDir := t.TempDir()
-			configPath := filepath.Join(tmpDir, "devlog.yml")
-			if err := os.WriteFile(configPath, []byte(tt.content), 0644); err != nil {
-				t.Fatalf("Failed to write test config: %v", err)
-			}
+A single-case test still uses the `TestSubject_Condition` name, builds state with `t.TempDir()`, and checks one behavior. `TestLoad_Defaults` and `TestLoad_EnvVarInterpolation` in `internal/config/config_test.go` follow that shape. Env changes are restored with `defer os.Unsetenv(...)`.
 
-			_, err := Load(configPath)
-			if err == nil {
-				t.Errorf("Load() expected error containing %q, got nil", tt.wantErr)
-				return
-			}
-			if !strings.Contains(err.Error(), tt.wantErr) {
-				t.Errorf("Load() error = %q, want containing %q", err.Error(), tt.wantErr)
-			}
-		})
-	}
-}
+Manifest tests sometimes mark sections `Arrange` / `Act` / `Assert` (`internal/manifest/manifest_test.go`). Other packages do not.
+
+Extension shape, from `browser-extension/test/background.test.js`:
+
+```js
+describe("background.js", () => {
+    it("does not auto-connect on load", () => {
+        const { chrome } = loadBackground();
+        expect(chrome._lastNativeHost).toBeUndefined();
+    });
+});
 ```
+
+`loadBackground` builds a `chrome` mock, runs `background.js` with `vm.runInContext`, and returns the mock plus captured console calls.
 
 ## Mocking
 
-**Framework:** None — uses manual dependency injection
+**Framework:**
+
+None for Go. No gomock, no mockery, no testify mocks. The extension hand-rolls a Chrome stub in `browser-extension/test/mocks/chrome.js` (`createChromeMock`). It is not `vitest-chrome` or `sinon`.
 
 **Patterns:**
-```go
-// Constructor with injectable I/O streams — from internal/natmsg/natmsg.go
-func NewHostWithStreams(reader io.Reader, writer io.Writer) *Host {
-	return &Host{
-		reader: bufio.NewReader(reader),
-		writer: writer,
-	}
-}
 
-// Used in tests — from internal/natmsg/natmsg_test.go
-func TestHost_ReadMessage_Success(t *testing.T) {
-	data := encodeMessage(t, inputMsg)
-	reader := bytes.NewReader(data)
-	host := NewHostWithStreams(reader, &bytes.Buffer{})
+- Inject streams instead of stdin. `NewHostWithStreams(reader, writer)` in `internal/natmsg/natmsg.go` is documented as the test constructor. Tests pass `bytes.NewReader` and `bytes.Buffer` (`internal/natmsg/natmsg_test.go`).
+- Inject the host entry point. `run(args, stdin, stdout, stderr)` in `cmd/devlog-host/main.go` is what `cmd/devlog-host/main_test.go` calls. Native frames are built by `encodeNativeMessage`.
+- Inject interfaces at the edge that touches other packages. `fixedHostManifest` in `internal/browsersession/browsersession_test.go` implements `ManifestOps` and delegates most methods to `manifest` while pinning `FindDevlogHostBinary`. `realSessionChecker` still calls `tmux.NewRunner`.
+- `withIsolatedHome` points `HOME` at `t.TempDir()` and clears `XDG_CONFIG_HOME` so manifest writes do not touch the developer home directory.
+- Extension mocks record `connectNative`, `postMessage`, `sendMessage`, and listener lists on `chrome._lastNativeHost`, `chrome._nativeMessages`, and `chrome._listeners`.
 
-	msg, err := host.ReadMessage()
-	// ...
-}
+**What to Mock:**
 
-func TestHost_WriteResponse(t *testing.T) {
-	var output bytes.Buffer
-	host := NewHostWithStreams(&bytes.Buffer{}, &output)
+- Process boundaries and host-wide paths: stdin/stdout, `HOME`, the native-host path, and `chrome.*`.
+- The extension has no browser in CI, so the Chrome API and `console` are stubbed. Page and content-script tests use jsdom (`browser-extension/test/content_script.test.js`, `browser-extension/test/page_inject.test.js`).
 
-	response := Response{Success: true}
-	if err := host.WriteResponse(response); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+**What NOT to Mock:**
 
-	// Read from output buffer to verify...
-}
-```
-
-No mock libraries. External dependencies (tmux binary) are tested via:
-- `t.Skip("tmux not available in PATH")` when tmux is missing
-- Real tmux sessions with unique names for isolation
+- The filesystem. Tests create real files with `t.TempDir()` and `os.WriteFile` (`internal/config/config_test.go`, `internal/logger/logger_test.go`, `internal/logrotate/logrotate_test.go`).
+- YAML parsing and config validation. `Load` reads a real temp `devlog.yml`.
+- Shell quoting. `TestQuote_InjectionCannotBreakOut` and `TestQuote_RoundTripProperty` run `sh -c` (`internal/shellescape/shellescape_test.go`). The property test skips when `sh` is not on `PATH`.
+- tmux, in `internal/tmux/tmux_test.go`, `internal/tmux/integration_test.go`, and `internal/e2e/cli_test.go`. Those tests skip or fail when tmux is absent. They are not fakes.
+- The `devlog` binary in e2e. `TestMain` runs `go build -o <tmp>/devlog ../../cmd/devlog` and the tests exec that binary.
 
 ## Fixtures and Factories
 
 **Test Data:**
-```go
-// Inline YAML strings for config tests — from internal/config/config_test.go
-content := `
-version: "1.0"
-project: myapp
-tmux:
-  session: dev
-  windows:
-    - name: server
-      panes:
-        - cmd: npm run dev
-          log: server.log
-`
 
-// Helper function for encoding — from internal/natmsg/natmsg_test.go
-func encodeMessage(t *testing.T, msg interface{}) []byte {
-	t.Helper()
-	data, err := json.Marshal(msg)
-	if err != nil {
-		t.Fatalf("failed to marshal message: %v", err)
-	}
-	lengthBytes := make([]byte, 4)
-	binary.NativeEndian.PutUint32(lengthBytes, uint32(len(data)))
-	return append(lengthBytes, data...)
-}
+- YAML and JSON live inline in the test function. `TestLoad_ValidConfig` assigns a raw string to `content` and writes it under `t.TempDir()`.
+- Log-run directories use fixed timestamp names such as `20240101-120000` (`internal/logrotate/logrotate_test.go`). Retention tests move mtime with `os.Chtimes`.
+- Native messages are Go structs passed through `encodeMessage` or `encodeNativeMessage`, which prefix a native-endian uint32 length. `sampleMessage` in `cmd/devlog-host/main_test.go` fills a `natmsg.Message` with a fixed `time.Date`.
+- E2e config is `writeConfig` in `internal/e2e/cli_test.go`: a `fmt.Sprintf` template with `version`, `project`, `logs_dir`, `run_mode: overwrite`, one window, and two panes.
+- Session names include `time.Now().UnixNano()` (`generateTestSessionName`, `sessionName`) so parallel developers do not share one tmux name. Integration tests `defer` `KillSession` when the session still exists.
+- There is no golden-file directory and no factory package.
 
-// Helper for time parsing — from internal/natmsg/natmsg_test.go
-func mustParseTime(t *testing.T, s string) time.Time {
-	t.Helper()
-	ts, err := time.Parse(time.RFC3339Nano, s)
-	if err != nil {
-		t.Fatalf("failed to parse time: %v", err)
-	}
-	return ts
-}
+**Location:**
 
-// Unique session name generator — from internal/tmux/integration_test.go
-func generateTestSessionName() string {
-	return fmt.Sprintf("devlog-test-%d", time.Now().UnixNano())
-}
-```
-
-**Temporary Files:**
-- Always use `t.TempDir()` for temp directories (auto-cleaned)
-- Write test config files via `os.WriteFile` into temp dirs
-- Environment variables set/unset with `defer os.Unsetenv()`
+- Helpers stay in the `*_test.go` file that uses them, or in `internal/browsersession/helpers_test.go` for pure string cases.
+- The only shared extension fixture module is `browser-extension/test/mocks/chrome.js`.
 
 ## Coverage
 
-**Requirements:** None enforced — no minimum threshold configured
+**Requirements:**
 
-**Command:** `go test -cover ./...` or `just test-cover`
+None. No coverage percent is enforced in `justfile`, `go.mod`, or `.github/workflows/ci.yml`. There is no `codecov.yml`. The Codecov step uses `codecov/codecov-action@v7` with `continue-on-error: true`, so a missing `CODECOV_TOKEN` or an upload failure does not fail CI. `README.md` only shows a Codecov badge.
+
+The profile written to `coverage.txt` is from `go test -race -covermode=atomic ./...`. That command does not pass `-tags=integration` or `-tags=e2e`, so `internal/tmux/integration_test.go` and `internal/e2e/cli_test.go` are absent from that profile. Extension coverage is not collected. `npm test` is `vitest run` with no coverage flag.
+
+**View Coverage:**
+
+- `just test-cover` prints a per-package percent (`go test -cover ./...`).
+- CI writes `coverage.txt` at the repo root and uploads it. The file is not kept as a source artifact in git.
 
 ## Test Types
 
 **Unit Tests:**
-- Majority of tests are unit tests
-- Test individual functions/methods in isolation
-- Located in `*_test.go` alongside source
-- Use `t.TempDir()` for filesystem tests, `bytes.Buffer` for I/O tests
-- Config parsing, validation, env var interpolation, log formatting, message encoding/decoding
+
+- Default `go test ./...` runs the colocated `*_test.go` files listed above. They cover config load and validation, native-message framing, logger formatting and level filters, log rotation (including dry-run), manifest path layout and JSON contents, shell quoting, `TouchFile`, browser-session wrapper setup under a fake `HOME`, and CLI `init` / `status` / `healthcheck`.
+- `internal/tmux/tmux_test.go` is compiled in this set but talks to a real tmux server. It skips when tmux is not on `PATH`. Treat it as a live session test, not a pure unit test.
+- `cmd/devlog/healthcheck_test.go` allows the error text `healthcheck failed` because tmux or `devlog-host` may be missing. It still fails on any other error.
+- Extension unit tests load each script in isolation. They do not start Chrome or Firefox.
 
 **Integration Tests:**
-- Located in `internal/tmux/integration_test.go`
-- Gated with `//go:build integration` build tag
-- Require real tmux binary in PATH
-- Skip with `t.Skip()` if tmux unavailable or `-short` flag used:
-```go
-func skipIfNoTmux(t *testing.T) {
-	t.Helper()
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
-	if _, err := exec.LookPath("tmux"); err != nil {
-		t.Skip("tmux not available in PATH")
-	}
-}
-```
-- Create real tmux sessions with unique names for isolation
-- Use `defer` cleanup to kill sessions after tests
-- Test full lifecycle: create → verify → kill → verify gone
+
+- File: `internal/tmux/integration_test.go`. Build tag: `integration`.
+- Require tmux on `PATH`. CI installs tmux first (`sudo apt-get install -y tmux` on Ubuntu; Homebrew on macOS). Windows CI skips this step (`if: runner.os != 'Windows'`).
+- `skipIfNoTmux` also skips when `-short` is set, so a short integration run does not open sessions.
+- Cases cover session create, multiple windows and panes, duplicate session names, and log file names with spaces, dashes, underscores, and dots (`TestTmuxIntegration_SpecialCharactersInPaths`). Cleanup kills the session in a `defer`.
+- Run: `just test-integration` or `go test -tags=integration ./internal/tmux/`. Verbose: `just test-integration-v`.
 
 **E2E Tests:**
-- Not used (no browser automation or full-system tests)
+
+- File: `internal/e2e/cli_test.go`. Build tag: `e2e`. Package comment says these tests need tmux and are for CI or pre-release checks.
+- `TestMain` builds the CLI. Tests call `runDevlog` and a real tmux session. Names look like `devlog-e2e-<unix nano>`.
+- Cases: `TestE2E_Lifecycle` (up, status, down), `TestE2E_UpFailsWhenAlreadyRunning`, `TestE2E_Healthcheck`, `TestE2E_Init`, `TestE2E_DownWithoutSession`, `TestE2E_TimestampedMode`.
+- CI command: `go test -tags=e2e -v ./internal/e2e/` in the Ubuntu `test` job only. `just test` and `just ci` do not run them. There is no Playwright or browser-store e2e suite.
 
 ## Common Patterns
 
-**Assertion Style:**
-```go
-// Fatal for setup failures
-if err != nil {
-    t.Fatalf("Load() failed: %v", err)
-}
+**Async Testing:**
 
-// Error for assertion failures (allows multiple to report)
-if cfg.Version != "1.0" {
-    t.Errorf("Version = %q, want %q", cfg.Version, "1.0")
-}
-
-// Fatal with descriptive message for unexpected nil errors
-if err == nil {
-    t.Fatal("Validate() expected error for negative max_runs, got nil")
-}
-```
+- Go tests do not use a fake clock, `synctest`, or `t.Parallel`. Timing is real. `internal/tmux/integration_test.go` sleeps `100 * time.Millisecond` after `CreateSession` before it stats the log file. `internal/logrotate/logrotate_test.go` sets directory mtime rather than waiting for retention days.
+- The logger mutex is not stressed by a concurrent test.
+- Extension tests are synchronous. The Chrome mock invokes `sendMessage` callbacks immediately (`browser-extension/test/mocks/chrome.js`). Tests do not use `async` / `await` or fake timers. `vi` is imported by `page_inject.test.js` for local spies, not for a timer queue.
+- Native-host tests write a full stdin buffer, then call `run`, which reads until EOF. They do not start a second process.
 
 **Error Testing:**
-```go
-// Check error contains expected substring
-_, err := Load(configPath)
-if err == nil {
-    t.Errorf("Load() expected error containing %q, got nil", tt.wantErr)
-    return
-}
-if !strings.Contains(err.Error(), tt.wantErr) {
-    t.Errorf("Load() error = %q, want containing %q", err.Error(), tt.wantErr)
-}
-```
 
-**Environment Variable Testing:**
-```go
-// Set env vars with deferred cleanup — from internal/config/config_test.go
-os.Setenv("TEST_PORT", "3000")
-defer os.Unsetenv("TEST_PORT")
-
-// Override HOME for path tests — from internal/natmsg/manifest_test.go
-home := os.Getenv("HOME")
-defer os.Setenv("HOME", home)
-os.Setenv("HOME", tmpDir)
-```
-
-**Tmux Tests Availability Guard:**
-```go
-// Skip pattern used in both unit and integration tests
-if _, err := exec.LookPath("tmux"); err != nil {
-    t.Skip("tmux not available in PATH")
-}
-```
-
-**Deferred Cleanup Pattern:**
-```go
-// Session cleanup in integration tests
-defer func() {
-    if runner.SessionExists() {
-        runner.KillSession()
-    }
-}()
-```
-
-**Timing in Integration Tests:**
-```go
-// Wait for async operations (tmux commands, log file writes)
-time.Sleep(100 * time.Millisecond)  // Short wait for file creation
-time.Sleep(300 * time.Millisecond)  // Longer wait for command output
-```
+- Expected failure: `err == nil` then `t.Fatal` or `t.Error`, then `strings.Contains(err.Error(), substring)`. Tests do not use `errors.Is` on the returned error. Config wants substrings such as `version is required` and `run_mode must be 'timestamped' or 'overwrite'` (`internal/config/config_test.go`). Tmux wants `already exists` and `does not exist` (`internal/tmux/tmux_test.go`).
+- EOF is identity, not a substring. `TestHost_ReadMessage_EOF` requires `err == io.EOF` (`internal/natmsg/natmsg_test.go`).
+- Host argument errors also check stderr. `TestRun_RequiresLogPath` requires the word `Usage:` on stderr (`cmd/devlog-host/main_test.go`).
+- Malformed input is "error, and continue" at the product level. `TestRun_MalformedMessageContinues` feeds a bad frame and still expects the process helper to finish the rest of the stream (`cmd/devlog-host/main_test.go`).
+- Skip is the third outcome, used when a tool is missing (`tmux`, `sh`) or when `-short` is set on the integration build. A skip is not a pass of the behavior.
+- Extension failures use `expect(...).toBe(...)` and, for a missing listener, `throw new Error("no onMessage listener registered")` in `getHandler` (`browser-extension/test/background.test.js`).
 
 ---
-*Testing analysis: 2026-07-19*
+
+*Testing analysis: 2026-10-01*

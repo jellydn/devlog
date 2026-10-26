@@ -4,9 +4,11 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/jellydn/devlog/internal/logger"
@@ -16,16 +18,18 @@ import (
 const usage = `devlog-host - Native messaging host for browser console logs
 
 Usage:
-  devlog-host <log-file-path> [log-levels...]
+  devlog-host <log-file-path> [log-levels...] [--max-bytes N] [--url PATTERN]...
 
 Arguments:
   log-file-path   Path to the log file (required)
   log-levels      Space-separated list of log levels to capture
                   (e.g., log warn error). If not specified, all levels are captured.
+  --max-bytes N   Stop appending after N bytes. 0 means no cap.
+  --url PATTERN   URL pattern to send to the extension. Repeat for each pattern.
 
 Examples:
   devlog-host ./logs/browser.log
-  devlog-host ./logs/browser.log log warn error
+  devlog-host ./logs/browser.log log warn error --url 'http://localhost:3000/*'
 
 The host reads length-prefixed JSON messages from stdin and writes formatted
 logs to the specified file. It runs until stdin is closed.
@@ -46,22 +50,65 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		return fmt.Errorf("log file path is required")
 	}
 
-	logPath := args[0]
-	levels := append([]string(nil), args[1:]...)
-
-	// Convert levels to lowercase for case-insensitive matching
-	for i, level := range levels {
-		levels[i] = strings.ToLower(level)
+	logPath, levels, urls, maxBytes, err := parseHostArgs(args)
+	if err != nil {
+		fmt.Fprint(stderr, usage)
+		return err
 	}
 
-	// Create logger
-	log, err := logger.New(logPath, levels)
+	log, err := logger.NewWithLimit(logPath, levels, maxBytes)
 	if err != nil {
-		return fmt.Errorf("Error: failed to create logger: %v\n", err)
+		return fmt.Errorf("failed to create logger: %v\n", err)
 	}
 	defer log.Close()
 
-	return processMessages(log, natmsg.NewHostWithStreams(stdin, stdout), stderr)
+	host := natmsg.NewHostWithStreams(stdin, stdout)
+	if len(urls) > 0 {
+		if err := host.WriteResponse(natmsg.Response{
+			Type:    "CONFIG",
+			Success: true,
+			Enabled: true,
+			URLs:    urls,
+			Levels:  levels,
+		}); err != nil {
+			return fmt.Errorf("failed to send config: %w", err)
+		}
+	}
+
+	return processMessages(log, host, stderr)
+}
+
+func parseHostArgs(args []string) (logPath string, levels, urls []string, maxBytes int64, err error) {
+	if len(args) < 1 {
+		return "", nil, nil, 0, fmt.Errorf("log file path is required")
+	}
+	logPath = args[0]
+	for i := 1; i < len(args); i++ {
+		switch args[i] {
+		case "--url":
+			if i+1 >= len(args) {
+				return "", nil, nil, 0, fmt.Errorf("--url requires a pattern")
+			}
+			i++
+			urls = append(urls, args[i])
+		case "--max-bytes":
+			if i+1 >= len(args) {
+				return "", nil, nil, 0, fmt.Errorf("--max-bytes requires a number")
+			}
+			i++
+			n, convErr := strconv.ParseInt(args[i], 10, 64)
+			if convErr != nil || n < 0 {
+				return "", nil, nil, 0, fmt.Errorf("--max-bytes must be a non-negative integer")
+			}
+			maxBytes = n
+		default:
+			if strings.HasPrefix(args[i], "--") {
+				return "", nil, nil, 0, fmt.Errorf("unknown flag %s", args[i])
+			}
+			levels = append(levels, strings.ToLower(args[i]))
+		}
+	}
+	return logPath, levels, urls, maxBytes, nil
 }
 
 // messageLogger is the subset of logger.Logger used by the host loop.
@@ -78,8 +125,12 @@ func processMessages(log messageLogger, host *natmsg.Host, stderr io.Writer) err
 				// Browser closed the connection, exit cleanly
 				return nil
 			}
-			// Log error but continue processing
 			fmt.Fprintf(stderr, "Error reading message: %v\n", err)
+			if errors.Is(err, natmsg.ErrOversizedMessage) {
+				// The length prefix was not followed by a body we can skip.
+				// Continuing would treat payload bytes as the next length.
+				return err
+			}
 			host.SendAck(false, err.Error())
 			continue
 		}

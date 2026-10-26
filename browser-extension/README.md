@@ -155,9 +155,8 @@ After making changes to shared files (background.js, content_script.js, etc.):
 The extension requires these permissions:
 
 - **`nativeMessaging`**: Communication with devlog-host binary
-- **`storage`**: Store configuration locally
-- **`activeTab`**: Read console logs from active tabs
-- **`<all_urls>`**: Inject content script on user-configured URLs only
+- **`storage`**: Store the pause flag only
+- **`<all_urls>`**: Load the content script so each frame can ask whether its URL is configured. The console hook runs only for matching URLs
 
 See [PRIVACY.md](../PRIVACY.md) for details on data handling.
 
@@ -208,7 +207,7 @@ This means the extension needs to be registered with your specific extension ID.
 
 1. Go to `chrome://extensions/`
 2. Enable "Developer mode" (top right)
-3. Copy your 32-character extension ID (e.g., `abcdefghijklmnopqrstuvwxyz123456`)
+3. Copy your 32-character extension ID (e.g., `abcdefghijklmnopabcdefghijklmnop`)
 4. Register the native host:
    ```bash
    devlog register --chrome --extension-id <YOUR_EXTENSION_ID>
@@ -278,16 +277,16 @@ This means the extension needs to be registered with your specific extension ID.
 
 ```bash
 # Register for Chrome with extension ID
-devlog register --chrome --extension-id abcdefghijklmnopqrstuvwxyz123456
+devlog register --chrome --extension-id abcdefghijklmnopabcdefghijklmnop
 
 # Register for Brave with extension ID
-devlog register --brave --extension-id abcdefghijklmnopqrstuvwxyz123456
+devlog register --brave --extension-id abcdefghijklmnopabcdefghijklmnop
 
 # Register for Firefox
 devlog register --firefox
 
 # Register for multiple browsers
-devlog register --chrome --brave --extension-id abcdefghijklmnopqrstuvwxyz123456
+devlog register --chrome --brave --extension-id abcdefghijklmnopabcdefghijklmnop
 ```
 
 ## Contributing

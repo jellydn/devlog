@@ -1,4 +1,7 @@
 (function () {
+	var root = document.documentElement;
+	var token = root ? root.getAttribute("data-devlog-token") : "";
+	if (!token) return;
 	if (window.__devlogPageInjected) return;
 	window.__devlogPageInjected = true;
 
@@ -10,6 +13,19 @@
 		debug: console.debug.bind(console),
 		trace: console.trace.bind(console),
 	};
+
+	function post(payload) {
+		var origin = "*";
+		try {
+			if (window.location.origin && window.location.origin !== "null") {
+				origin = window.location.origin;
+			}
+		} catch (e) {
+			origin = "*";
+		}
+		payload.token = token;
+		window.postMessage(payload, origin);
+	}
 
 	function wrap(level) {
 		return function () {
@@ -32,17 +48,14 @@
 						args.push("[unreadable]");
 					}
 				}
-				window.postMessage(
-					{
-						__devlog: true,
-						level: level,
-						message: args.join(" "),
-						stack: new Error().stack || "",
-						url: window.location.href,
-						timestamp: new Date().toISOString(),
-					},
-					"*",
-				);
+				post({
+					__devlog: true,
+					level: level,
+					message: args.join(" "),
+					stack: new Error().stack || "",
+					url: window.location.href,
+					timestamp: new Date().toISOString(),
+				});
 			} catch (e) {
 				orig.error("[devlog] page_inject wrap failed:", e);
 			}
@@ -57,24 +70,21 @@
 	console.trace = wrap("trace");
 
 	window.addEventListener("error", function (event) {
-		window.postMessage(
-			{
-				__devlog: true,
-				level: "error",
-				message: "Uncaught Error: " + event.message,
-				stack: event.error
-					? event.error.stack
-					: "at " +
-						event.filename +
-						":" +
-						event.lineno +
-						":" +
-						event.colno,
-				url: window.location.href,
-				timestamp: new Date().toISOString(),
-			},
-			"*",
-		);
+		post({
+			__devlog: true,
+			level: "error",
+			message: "Uncaught Error: " + event.message,
+			stack: event.error
+				? event.error.stack
+				: "at " +
+					event.filename +
+					":" +
+					event.lineno +
+					":" +
+					event.colno,
+			url: window.location.href,
+			timestamp: new Date().toISOString(),
+		});
 	});
 
 	window.addEventListener("unhandledrejection", function (event) {
@@ -93,16 +103,13 @@
 				message += ": " + String(reason);
 			}
 		}
-		window.postMessage(
-			{
-				__devlog: true,
-				level: "error",
-				message: message,
-				stack: stack,
-				url: window.location.href,
-				timestamp: new Date().toISOString(),
-			},
-			"*",
-		);
+		post({
+			__devlog: true,
+			level: "error",
+			message: message,
+			stack: stack,
+			url: window.location.href,
+			timestamp: new Date().toISOString(),
+		});
 	});
 })();

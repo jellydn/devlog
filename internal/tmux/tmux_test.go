@@ -277,7 +277,7 @@ func TestEnsurePaneLogFiles(t *testing.T) {
 		},
 	}
 
-	if err := ensurePaneLogFiles(logsDir, windows); err != nil {
+	if err := ensurePaneLogFiles(logsDir, windows, false); err != nil {
 		t.Fatalf("ensurePaneLogFiles() failed: %v", err)
 	}
 
@@ -293,6 +293,21 @@ func TestEnsurePaneLogFiles(t *testing.T) {
 		if info.Size() != 0 {
 			t.Errorf("expected empty pre-created log file (%s), got size=%d", logPath, info.Size())
 		}
+	}
+
+	webLog := filepath.Join(logsDir, "web.log")
+	if err := os.WriteFile(webLog, []byte("old"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensurePaneLogFiles(logsDir, windows, true); err != nil {
+		t.Fatalf("ensurePaneLogFiles(truncate) failed: %v", err)
+	}
+	data, err := os.ReadFile(webLog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data) != 0 {
+		t.Errorf("overwrite left %q", data)
 	}
 }
 

@@ -83,6 +83,35 @@ func TestNew_AppendsToExistingFile(t *testing.T) {
 	}
 }
 
+func TestNewWithLimit_DropsAfterCap(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "browser.log")
+	logger, err := NewWithLimit(logPath, nil, 80)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	msg := &natmsg.Message{Level: "log", Message: "hello from the page"}
+	msg.Timestamp.Time = time.Unix(0, 0).UTC()
+	for i := 0; i < 20; i++ {
+		if err := logger.Log(msg); err != nil {
+			t.Fatal(err)
+		}
+	}
+	logger.Close()
+
+	content, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(content)
+	if !strings.Contains(text, "log size cap reached") {
+		t.Fatalf("log = %q, want cap notice", text)
+	}
+	if strings.Count(text, "hello from the page") > 2 {
+		t.Fatalf("log kept growing past the cap:\n%s", text)
+	}
+}
+
 func TestShouldLog_NoLevels(t *testing.T) {
 	tmpDir := t.TempDir()
 	logPath := filepath.Join(tmpDir, "browser.log")

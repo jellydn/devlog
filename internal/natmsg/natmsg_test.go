@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"io"
 	"testing"
 	"time"
@@ -93,16 +94,30 @@ func TestHost_ReadMessage_InvalidLength(t *testing.T) {
 }
 
 func TestHost_ReadMessage_TooLarge(t *testing.T) {
-	// Message claiming to be 100MB
-	data := make([]byte, 4)
-	binary.NativeEndian.PutUint32(data, 100*1024*1024)
-	reader := bytes.NewReader(data)
-	host := NewHostWithStreams(reader, &bytes.Buffer{})
+	// Only the length prefix is available. Reading the declared body would fail.
+	host := NewHostWithStreams(&prefixOnlyReader{}, &bytes.Buffer{})
 
 	_, err := host.ReadMessage()
-	if err == nil {
-		t.Error("expected error for oversized message, got nil")
+	if !errors.Is(err, ErrOversizedMessage) {
+		t.Fatalf("error = %v, want ErrOversizedMessage", err)
 	}
+}
+
+// prefixOnlyReader returns a 100MiB length prefix and then EOF.
+type prefixOnlyReader struct {
+	sent bool
+}
+
+func (r *prefixOnlyReader) Read(p []byte) (int, error) {
+	if r.sent {
+		return 0, io.EOF
+	}
+	if len(p) < 4 {
+		return 0, io.ErrShortBuffer
+	}
+	r.sent = true
+	binary.NativeEndian.PutUint32(p[:4], 100*1024*1024)
+	return 4, nil
 }
 
 func TestHost_ReadMessage_InvalidJSON(t *testing.T) {

@@ -68,7 +68,7 @@ func testDefaultPermissions(t *testing.T) {
 	}
 	// On Windows, os.Stat().Mode().Perm() does not reflect Unix permission bits
 	// (the OS uses ACLs instead), so skip the exact-mode assertion.
-	if runtime.GOOS != "windows" && info.Mode().Perm() != 0644 {
-		t.Errorf("mode = %o, want 0644", info.Mode().Perm())
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
+		t.Errorf("mode = %o, want 0600", info.Mode().Perm())
 	}
 }

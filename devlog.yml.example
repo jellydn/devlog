@@ -12,6 +12,11 @@ run_mode: timestamped
 
 # Note: Both max_runs and retention_days can be used together.
 # Directories will be removed if they exceed max_runs OR are older than retention_days.
+# Cleanup only deletes directories named YYYYMMDD-HHMMSS or YYYYMMDD-HHMMSS-N.
+
+# Browser log cap in bytes. Omitted or 0 means 256MiB. -1 means no cap.
+# Server pane logs from tmux are not capped by this value.
+# max_log_bytes: 268435456
 
 tmux:
   session: devlog-demo
